@@ -15,6 +15,39 @@ A Telegram bot that helps one person track daily nutrition and activity, in Roma
 
 A single user (the owner's friend). She is the only tracked person; the bot lives in a small group (owner + her + bot) with Telegram privacy mode OFF.
 
+## Create the bot (BotFather)
+
+1. In Telegram, open [@BotFather](https://t.me/BotFather) and send `/newbot`. Choose a name and a username ending in `bot`. Copy the **token** it gives you into `BOT_TOKEN`.
+2. **Turn group privacy OFF** so the bot receives every message and photo caption in the group (not just commands addressed to it):
+   - Send `/setprivacy` to BotFather → pick your bot → choose **Disable**.
+   - If the bot was already in the group, **remove and re-add it** so the new setting takes effect.
+3. Add the bot to the group (owner + tracked user + bot).
+4. Get the tracked user's numeric id by messaging [@userinfobot](https://t.me/userinfobot), and put it in `TRACKED_USER_ID`. While testing yourself, use **your own** id so the bot replies to you.
+
+> The bot only ever responds to the configured `TRACKED_USER_ID`; messages from anyone else in the group are ignored.
+
+## Running locally
+
+Requires Python 3.12+.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"        # app + dev tools (ruff, black)
+
+cp .env.example .env           # then edit .env with your real values
+python -m daytracker           # starts long-polling; Ctrl+C to stop
+```
+
+On first start the SQLite database file (`DATABASE_PATH`, default `daytracker.db`) is created automatically. Send `/start` or `/ajutor` in the group to check it responds.
+
+### Lint & format
+
+```bash
+ruff check .
+black --check .
+```
+
 ## Documentation
 
 - `PLAN.md` — phased roadmap
@@ -25,4 +58,4 @@ A single user (the owner's friend). She is the only tracked person; the bot live
 
 ## Status
 
-**Phase 1 — Skeleton. IN PROGRESS.** Planning docs complete; awaiting approval before code.
+**Phase 1 — Skeleton. IN PROGRESS.** Scaffold built: config, async DB bootstrap, long-polling bot, `/start` + `/ajutor` in Romanian. Pending a live run with a real token in the group.
