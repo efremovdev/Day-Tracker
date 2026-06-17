@@ -16,4 +16,5 @@ Date-stamped log of work sessions.
   her tracked, single-user for now, free-cloud 24/7 hosting.
 - Decided stack and the swappable LLM interface (default Google Gemini Flash free tier).
 - Generated the 6 planning docs and a 9-phase roadmap (P1 Skeleton → P9 Polish).
+- Evaluated a nutrition database/API vs the LLM; chose **LLM-only** (see DECISIONS). Plan unchanged.
 - **Next:** user reviews/approves the plan; then start P1 (Skeleton) in a fresh chat.

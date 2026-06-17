@@ -57,3 +57,14 @@ Append-only log. Never delete entries; supersede with new dated entries if neede
 - Free cloud, runs as a long-polling worker. Specific host finalized in P8; current
   candidates are Fly.io free allowance or an Oracle Always Free VM. Railway/Render are no
   longer reliably free for an always-on worker, so they are deprioritized.
+
+## 2026-06-17 — Macro engine: LLM-only (evaluated DB/hybrid)
+
+- Considered a nutrition database/API instead of / alongside the LLM: USDA FoodData
+  Central, Open Food Facts (barcodes), and NL-nutrition APIs (Nutritionix/Edamam).
+- **Decision: LLM-only for now.** Input is Romanian free-text home meals; the hard part
+  (parsing + translating + matching messy text to DB rows) is exactly what the LLM
+  removes, while DB strengths (exact branded/barcode macros) rarely apply to gram-based
+  home logging. Pure-DB NL APIs are English, rate-limited and commercial — a worse fit.
+- The `MacroEstimator` interface keeps a DB/hybrid layer (LLM parses → DB verifies, plus
+  barcode lookups) available as a cheap future add if exact branded accuracy is ever wanted.
