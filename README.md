@@ -111,9 +111,12 @@ Oracle's ARM capacity is unavailable in your region.
    sudo systemctl enable --now docker
    sudo usermod -aG docker $USER && newgrp docker   # run docker without sudo
    ```
-4. **Get the code and configure secrets:**
+4. **Get the code and configure secrets.** The repo is private, so let the VM read it
+   with a read-only **deploy key**: on the VM run `ssh-keygen -t ed25519 -C daytracker-vm`
+   (no passphrase), then add the printed `~/.ssh/id_ed25519.pub` at
+   *GitHub → repo → Settings → Deploy keys → Add deploy key* (read access is enough). Then:
    ```bash
-   git clone <your-repo-url> daytracker && cd daytracker
+   git clone git@github.com:efremovdev/Day-Tracker.git daytracker && cd daytracker
    cp .env.example .env
    nano .env                      # set BOT_TOKEN, TRACKED_USER_ID, GEMINI_API_KEY
    ```
