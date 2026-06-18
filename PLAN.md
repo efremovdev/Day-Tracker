@@ -44,7 +44,7 @@ Acceptance:
 
 ---
 
-## P3: Meal logging + AI macro estimation [IN PROGRESS]
+## P3: Meal logging + AI macro estimation [DONE 2026-06-18]
 
 Core feature: turn a Romanian caption into stored macros.
 

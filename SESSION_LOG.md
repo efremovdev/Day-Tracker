@@ -153,3 +153,16 @@ stored immediately (corrections via `/sterge` in P4).
 `/masa 40g orez, 100g piept de pui`, confirms plausible macros + storage, sends a second
 meal to confirm the running daily total updates, and tests a `/masa` **photo caption** in
 the privacy-OFF group. P3 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.
+
+---
+
+## 2026-06-18 — P3 closed
+
+- User ran the live acceptance test (real `GEMINI_API_KEY`): `/masa` returned plausible
+  macros and stored the meal, a second meal updated the running daily total correctly, and
+  the `/masa` photo-caption path worked in the privacy-OFF group. ✅
+- Re-verified the static gate before closing: `ruff` + `black --check` pass and the P3
+  offline smoke test passes; working tree clean.
+- **P3 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
+- No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P4: Activity,
+  water, weight + corrections** (`/activitate`, `/apa`, `/cantar`, `/azi`, `/sterge`).

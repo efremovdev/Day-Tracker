@@ -74,8 +74,11 @@ black --check .
 
 ## Status
 
-**Phase 3 — Meal logging + AI macro estimation. IN PROGRESS.** `/masa <text>` (also as a photo caption) sends the description to Gemini, stores per-item macros, and replies with the breakdown, the meal total, and the running daily total vs target. Pending a live run in Telegram with a real `GEMINI_API_KEY`.
+**Phase 3 — Meal logging + AI macro estimation. DONE.** `/masa <text>` (also as a photo caption) sends the description to Gemini, stores per-item macros, and replies with the breakdown, the meal total, and the running daily total vs target. Live acceptance passed.
+
+**Next: Phase 4 — Activity, water, weight + corrections** (`/activitate`, `/apa`, `/cantar`, `/azi`, `/sterge`).
 
 Done so far:
+- **Phase 3 — Meal logging:** `/masa` text + photo-caption → Gemini macro estimation (swappable provider, ordered model-fallback on free-tier 429), stored per-item with running daily totals vs targets.
 - **Phase 2 — Profile & targets:** `/profil` (guided onboarding) computes daily calorie + macro targets (Mifflin–St Jeor BMR → TDEE → goal adjustment); `/tinte` views and adjusts them.
 - **Phase 1 — Skeleton:** config, async DB bootstrap, long-polling bot, `/start` + `/ajutor` in Romanian.
