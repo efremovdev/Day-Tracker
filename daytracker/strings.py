@@ -7,6 +7,7 @@ Messages use Telegram HTML formatting (the bot's default parse mode).
 from __future__ import annotations
 
 import html
+import random
 from datetime import date
 from typing import TYPE_CHECKING
 
@@ -15,7 +16,7 @@ from .targets import Activity, Goal, Sex
 if TYPE_CHECKING:
     from .estimator import MealEstimate
     from .models import ActivityLog, Meal, Profile, WeightLog
-    from .repository import DayTotals, LastEntry
+    from .repository import DaySummary, DayTotals, LastEntry
 
 
 def _esc(text: str) -> str:
@@ -327,4 +328,93 @@ def format_delete_done(kind: str, day: DayTotals, profile: Profile | None) -> st
     if kind == "masa":
         lines.append("")
         lines.append(_format_day_progress(day, profile))
+    return "\n".join(lines)
+
+
+# --- Rezumat zilnic (P5) -------------------------------------------------------
+
+# Shown by the 21:00 auto-summary when nothing at all was logged that day.
+SUMMARY_EMPTY = "Azi n-ai înregistrat nimic. 🤔\nMâine reluăm! 💪"
+
+# Short encouraging notes, picked by how the day went. The pick is seeded by the
+# date so /sumar and the scheduled summary show the *same* note for a given day
+# (PLAN.md P5 acceptance), while still varying day to day. Richer/randomised
+# motivation is P9.
+SUMMARY_NOTES_ON_TARGET = [
+    "Zi excelentă, ai fost chiar pe țintă! 🎯",
+    "Echilibru perfect azi. Ține-o tot așa! 👏",
+    "Țintă atinsă — felicitări! 🌟",
+]
+SUMMARY_NOTES_UNDER = [
+    "Mai e loc de o gustare sănătoasă. 🍎",
+    "Ai rămas sub țintă — ai grijă să mănânci destul. 🥗",
+    "Încă puține calorii până la țintă. 💪",
+]
+SUMMARY_NOTES_OVER = [
+    "Ai depășit puțin ținta — mâine echilibrăm. 💪",
+    "Peste țintă azi, dar nicio grijă: contează constanța. 🌱",
+    "O zi mai plină — mâine o luăm lin. 🙂",
+]
+SUMMARY_NOTES_NO_PROFILE = [
+    "Completează /profil ca să-ți pot urmări țintele. 🎯",
+    "Setează-ți țintele cu /profil pentru un rezumat complet. 💡",
+]
+
+
+def _pick_summary_note(summary: DaySummary) -> str:
+    """Choose an encouraging note based on kcal vs target (deterministic per day)."""
+    rng = random.Random(summary.log_date.toordinal())
+    profile = summary.profile
+    if profile is None or not profile.target_kcal:
+        return rng.choice(SUMMARY_NOTES_NO_PROFILE)
+    ratio = summary.totals.kcal / profile.target_kcal
+    if ratio < 0.9:
+        return rng.choice(SUMMARY_NOTES_UNDER)
+    if ratio > 1.1:
+        return rng.choice(SUMMARY_NOTES_OVER)
+    return rng.choice(SUMMARY_NOTES_ON_TARGET)
+
+
+def _format_summary_weight(summary: DaySummary) -> str:
+    """Latest known weight; if it's from an earlier day, note that date."""
+    weight = summary.latest_weight
+    if weight is None:
+        return "—"
+    text = f"{_fmt_num(weight.weight_kg)} kg"
+    if not summary.weighed_today:
+        text += f" <i>({weight.log_date.strftime('%d.%m')})</i>"
+    return text
+
+
+def format_summary(summary: DaySummary) -> str:
+    """The daily summary used by both /sumar and the 21:00 auto-summary.
+
+    Same data → same text, so the two outputs match (PLAN.md P5 acceptance).
+    """
+    header = f"📊 <b>Rezumat zilnic</b> ({summary.log_date.strftime('%d.%m.%Y')})"
+    if summary.is_empty:
+        return f"{header}\n\n{SUMMARY_EMPTY}"
+
+    lines = [header, "", _format_day_progress(summary.totals, summary.profile), ""]
+
+    lines.append("🍽️ <b>Mese</b>")
+    if summary.meals:
+        for meal in summary.meals:
+            lines.append(f"• {_esc(meal.raw_text)} — <b>{meal.total_kcal}</b> kcal")
+    else:
+        lines.append("<i>nimic</i>")
+    lines.append("")
+
+    lines.append("🏃 <b>Activitate</b>")
+    if summary.activities:
+        for activity in summary.activities:
+            lines.append(f"• {_esc(activity.raw_text)}")
+    else:
+        lines.append("<i>nimic</i>")
+    lines.append("")
+
+    lines.append(f"💧 <b>Apă:</b> {summary.water_ml} ml")
+    lines.append(f"⚖️ <b>Greutate:</b> {_format_summary_weight(summary)}")
+    lines.append("")
+    lines.append(_pick_summary_note(summary))
     return "\n".join(lines)

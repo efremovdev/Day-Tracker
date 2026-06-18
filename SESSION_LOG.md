@@ -227,3 +227,53 @@ mark **[DONE]**.
 - **P4 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
 - No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P5: Daily summary**
   (`/sumar` on demand + the 21:00 Europe/Bucharest auto-summary via APScheduler).
+
+---
+
+## 2026-06-18 — P5 Daily summary (implementation)
+
+Claimed P5 (flipped to [IN PROGRESS]). Confirmed the open params with the user first
+(see today's DECISIONS entry): auto-summary goes to the **last chat she wrote in**
+(remembered, zero config); an empty day still gets a **short nudge**; the encouraging
+note is **canned, varied Romanian** seeded by the date (so `/sumar` and the scheduled
+summary match); latest weight = **latest known across days**.
+
+Built the daily summary, on demand and scheduled:
+- `models.py` — `UserChat` (telegram id → last chat id), so the unsolicited 21:00 post
+  has a destination. Additive `create_all`.
+- `repository.py` — `remember_chat` / `get_chat_id`; `get_latest_weight` (across all
+  days, vs the existing today-only helper); a `DaySummary` DTO (`is_empty` /
+  `weighed_today` properties) and `get_day_summary` that gathers meals, totals,
+  activity, water, latest weight, profile in one call — the single source both
+  summaries read.
+- `strings.py` — `format_summary` (header, kcal/macros vs targets %, per-meal list,
+  activity, water, latest weight, note; empty-day → nudge), canned note buckets +
+  `_pick_summary_note` (date-seeded, deterministic per day). User text HTML-escaped.
+- `handlers/summary.py` — `/sumar` (replies with `format_summary` of `get_day_summary`).
+- `middlewares.py` — `ChatRecorderMiddleware` (outer, after the tracked-user gate):
+  records the chat of each tracked message; best-effort (never blocks handling).
+- `scheduler.py` — `send_daily_summary` (looks up the chat, builds + posts the same
+  summary; skips if no chat known; send errors logged, not fatal) and `create_scheduler`
+  (`AsyncIOScheduler`, one `CronTrigger` 21:00 Europe/Bucharest, `coalesce`,
+  `misfire_grace_time=3600`).
+- `bot.py` — register `summary.router` + `ChatRecorderMiddleware`; build/start the
+  scheduler before long-polling, shut it down in `finally`.
+- `pyproject.toml` — added `APScheduler>=3.10,<4` (installed 3.11.2 in `.venv`).
+
+Verified: `ruff` + `black --check` pass; offline smoke test passes — chat memory
+(insert/no-op/update/read), latest-weight across-days vs today-only, **empty-day nudge**,
+populated summary (totals, water sum, today-weight, 100 % → on-target note, HTML escape),
+**scheduled job posts to the remembered chat and matches `/sumar` (deterministic note,
+P5 acceptance)**, job **skipped when no chat recorded**, scheduler configured at
+**hour=21 minute=0 tz=Europe/Bucharest**; plus dispatcher wiring (summary router + 2
+outer middlewares) and the `ChatRecorderMiddleware` recording + chaining (and tolerating
+a missing sessionmaker).
+
+Choices within P5 scope (no new architectural decisions needed): one shared
+gather+format path for both summaries; note seeded by date for same-day consistency;
+scheduler in-process (no persistence — P7); destination skip when no chat is known yet.
+
+**Pending (live acceptance):** user runs `/sumar` and confirms the summary is correct;
+confirms the 21:00 auto-summary fires and matches `/sumar`; confirms it lands in the
+expected chat (the one she last wrote in). P5 stays **[IN PROGRESS]** until that passes →
+then mark **[DONE]**.

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import ActivityLog, Meal, MealItem, Profile, WaterLog, WeightLog
+from .models import ActivityLog, Meal, MealItem, Profile, UserChat, WaterLog, WeightLog
 from .targets import Targets
 
 if TYPE_CHECKING:
@@ -230,6 +230,17 @@ async def get_latest_weight_today(
     return await session.scalar(stmt)
 
 
+async def get_latest_weight(session: AsyncSession, *, telegram_user_id: int) -> WeightLog | None:
+    """The most recent weigh-in across *all* days (latest known weight, for /sumar)."""
+    stmt = (
+        select(WeightLog)
+        .where(WeightLog.telegram_user_id == telegram_user_id)
+        .order_by(WeightLog.created_at.desc(), WeightLog.id.desc())
+        .limit(1)
+    )
+    return await session.scalar(stmt)
+
+
 # --- Corrections: last entry + delete (P4) ------------------------------------
 
 
@@ -317,3 +328,72 @@ async def delete_entry(session: AsyncSession, *, kind: str, entry_id: int) -> No
     elif kind == "cantar":
         await session.execute(delete(WeightLog).where(WeightLog.id == entry_id))
     await session.commit()
+
+
+# --- Daily summary: chat memory + day bundle (P5) ------------------------------
+
+
+async def remember_chat(session: AsyncSession, *, telegram_user_id: int, chat_id: int) -> None:
+    """Record the chat the user last wrote in (where the auto-summary is posted)."""
+    row = await session.get(UserChat, telegram_user_id)
+    if row is None:
+        session.add(UserChat(telegram_user_id=telegram_user_id, chat_id=chat_id))
+    elif row.chat_id != chat_id:
+        row.chat_id = chat_id
+    else:
+        return  # unchanged — skip the write
+    await session.commit()
+
+
+async def get_chat_id(session: AsyncSession, *, telegram_user_id: int) -> int | None:
+    """The chat the user last wrote in, or ``None`` if she hasn't messaged yet."""
+    row = await session.get(UserChat, telegram_user_id)
+    return row.chat_id if row is not None else None
+
+
+@dataclass(frozen=True, slots=True)
+class DaySummary:
+    """Everything one day's summary needs, gathered in a single read.
+
+    Shared by ``/sumar`` and the scheduled 21:00 job so both render identical output
+    (PLAN.md P5 acceptance). ``latest_weight`` is the latest weigh-in across *all*
+    days (not today-only, unlike ``/azi``), per KNOWN_ISSUES.md.
+    """
+
+    log_date: date
+    meals: list[Meal]
+    totals: DayTotals
+    activities: list[ActivityLog]
+    water_ml: int
+    latest_weight: WeightLog | None
+    profile: Profile | None
+
+    @property
+    def weighed_today(self) -> bool:
+        return self.latest_weight is not None and self.latest_weight.log_date == self.log_date
+
+    @property
+    def is_empty(self) -> bool:
+        """True when nothing at all was logged *today* (no meal/activity/water/weigh-in)."""
+        return (
+            not self.meals and not self.activities and self.water_ml == 0 and not self.weighed_today
+        )
+
+
+async def get_day_summary(
+    session: AsyncSession, *, telegram_user_id: int, log_date: date
+) -> DaySummary:
+    """Gather all data for a day's summary (meals, totals, activity, water, weight, profile)."""
+    return DaySummary(
+        log_date=log_date,
+        meals=await get_day_meals(session, telegram_user_id=telegram_user_id, log_date=log_date),
+        totals=await get_day_totals(session, telegram_user_id=telegram_user_id, log_date=log_date),
+        activities=await get_day_activities(
+            session, telegram_user_id=telegram_user_id, log_date=log_date
+        ),
+        water_ml=await get_day_water_ml(
+            session, telegram_user_id=telegram_user_id, log_date=log_date
+        ),
+        latest_weight=await get_latest_weight(session, telegram_user_id=telegram_user_id),
+        profile=await get_profile(session, telegram_user_id),
+    )

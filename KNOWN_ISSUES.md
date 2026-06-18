@@ -74,3 +74,24 @@ Active bugs, gotchas, workarounds. Append with date.
   from the model) and out of P4 scope — note for a P7 hardening pass.
 - **Schema is additive.** An existing `daytracker.db` gains `activities`, `water_logs`,
   and `weight_logs` via `create_all` on next start — no migration, no data loss.
+
+## 2026-06-18 — P5 notes
+
+- **Scheduler runs are not persisted across downtime.** APScheduler uses an in-memory
+  jobstore, so if the process is *down* at 21:00 the daily summary is simply missed —
+  it is **not** replayed when the bot restarts. `misfire_grace_time=3600` only covers a
+  brief delay while the running loop is busy. Restart safety (persist/reschedule on
+  boot) is a P7 concern.
+- **Auto-summary needs at least one prior message.** The destination is the chat the
+  tracked user last wrote in; until she has sent *any* message (so `user_chats` has a
+  row), the 21:00 job logs "no chat recorded yet" and sends nothing. After her first
+  message it works. `/sumar` is unaffected (it replies to the message).
+- **Encouraging note is deterministic per day, not random.** Seeded by the calendar
+  date so `/sumar` and the scheduled summary match on the same day (P5 acceptance). It
+  therefore won't vary if `/sumar` is run twice the same day — by design. Richer/varied
+  motivation is P9.
+- **Summary still interpolates LLM item names / raw meal text.** Meal `raw_text` and
+  activity text are HTML-escaped in the summary (as in `/azi`), but the older `/masa`
+  reply remains unescaped (carried over from the P4 note). Out of P5 scope; P7 hardening.
+- **Schema is additive.** An existing `daytracker.db` gains `user_chats` via
+  `create_all` on next start — no migration, no data loss.

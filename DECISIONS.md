@@ -158,3 +158,36 @@ locked; these pin the open parameters):
   `create_all` adds them on next start; no migration, no data loss.
 - **User text is HTML-escaped** where shown back (`/azi`, `/sterge` confirm) so a
   stray `<`/`&` in her caption can't break Telegram HTML parsing.
+
+## 2026-06-18 — P5 daily summary
+
+Confirmed with the user at the start of P5 (the 21:00 time and the content list were
+already locked; these pin the open parameters):
+
+- **Auto-summary destination — remember the last chat she wrote in.** The 21:00
+  summary is unsolicited, so (unlike `/sumar`, which just replies) it needs a chat
+  id. Chosen over a fixed `SUMMARY_CHAT_ID` env var or DM-only: a tiny `user_chats`
+  table records the chat of each incoming message (via an outer
+  `ChatRecorderMiddleware` that runs only for the tracked user), and the job posts
+  there — zero config, and it follows her between the group and a private chat. If
+  she has never written, the job logs and skips (nothing to send to).
+- **Empty day → still send a short nudge.** On a day with nothing logged, the 21:00
+  summary fires anyway with a brief "n-ai înregistrat nimic / mâine reluăm" message,
+  keeping the daily habit and acting as a reminder. "Empty" means nothing logged
+  *today* (a weigh-in from an earlier day doesn't count).
+- **Encouraging note — canned, varied Romanian, no LLM.** A small set of notes,
+  bucketed by kcal vs target (<90 % under, 90–110 % on target, >110 % over; a
+  no-profile bucket prompts `/profil`). The pick is **seeded by the date** so
+  `/sumar` and the scheduled summary show the *same* note for a given day (P5
+  acceptance: "output matches the same data") while still varying day to day.
+  Richer/randomised motivation stays a P9 concern.
+- **Latest weight = latest known across all days** (not today-only like `/azi`),
+  per the KNOWN_ISSUES note that deferred "latest known weight" to P5/P6. Shown with
+  its date when it isn't from today.
+- **One shared path for both summaries.** `repository.get_day_summary` gathers the
+  day's data into a `DaySummary` DTO and `strings.format_summary` renders it; both
+  `/sumar` and the scheduler call exactly these, so the two outputs are identical.
+- **Scheduler:** APScheduler `AsyncIOScheduler` in the bot's own loop, one
+  `CronTrigger(hour=21, minute=0, tz=Europe/Bucharest)` job, started before
+  long-polling and shut down on exit. Jobs are not persisted, so a run missed
+  because the process was *down* at 21:00 is not replayed — restart safety is P7.

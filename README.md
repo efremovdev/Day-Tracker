@@ -74,11 +74,12 @@ black --check .
 
 ## Status
 
-**Phase 3 — Meal logging + AI macro estimation. DONE.** `/masa <text>` (also as a photo caption) sends the description to Gemini, stores per-item macros, and replies with the breakdown, the meal total, and the running daily total vs target. Live acceptance passed.
+**Phase 5 — Daily summary. IN PROGRESS.** `/sumar` shows today's summary on demand (kcal + macros vs targets, per-meal list, activity, water, latest known weight, and a short encouraging note), and an APScheduler job posts the same summary automatically at 21:00 Europe/Bucharest. The auto-summary is delivered to the chat the tracked user last wrote in (the bot remembers it), so it follows her between the group and a private chat. (Pending live acceptance.)
 
-**Next: Phase 4 — Activity, water, weight + corrections** (`/activitate`, `/apa`, `/cantar`, `/azi`, `/sterge`).
+**Next: Phase 6 — Weekly report** (`/saptamana` + the Sunday-night report).
 
 Done so far:
+- **Phase 4 — Activity, water, weight + corrections:** `/activitate` (text + photo caption), `/apa <ml>` (additive), `/cantar <kg>` (tracking only); `/azi` shows today's entries vs targets; `/sterge` removes the last entry of any type with a Da/Nu confirmation.
 - **Phase 3 — Meal logging:** `/masa` text + photo-caption → Gemini macro estimation (swappable provider, ordered model-fallback on free-tier 429), stored per-item with running daily totals vs targets.
 - **Phase 2 — Profile & targets:** `/profil` (guided onboarding) computes daily calorie + macro targets (Mifflin–St Jeor BMR → TDEE → goal adjustment); `/tinte` views and adjusts them.
 - **Phase 1 — Skeleton:** config, async DB bootstrap, long-polling bot, `/start` + `/ajutor` in Romanian.

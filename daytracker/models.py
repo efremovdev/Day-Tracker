@@ -157,3 +157,21 @@ class WeightLog(Base):
 
     weight_kg: Mapped[float] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class UserChat(Base):
+    """Where to deliver the scheduled summary (P5): the chat the user last wrote in.
+
+    The 21:00 auto-summary is unsolicited, so unlike ``/sumar`` (which just replies)
+    it needs a destination chat id. We remember the chat of each incoming message and
+    post the summary there, so it follows her between the group and a private chat
+    (DECISIONS.md, 2026-06-18). Keyed by Telegram user id — one row per user.
+    """
+
+    __tablename__ = "user_chats"
+
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
