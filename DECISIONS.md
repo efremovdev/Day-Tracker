@@ -191,3 +191,52 @@ already locked; these pin the open parameters):
   `CronTrigger(hour=21, minute=0, tz=Europe/Bucharest)` job, started before
   long-polling and shut down on exit. Jobs are not persisted, so a run missed
   because the process was *down* at 21:00 is not replayed — restart safety is P7.
+
+## 2026-06-18 — P6 weekly report
+
+Confirmed with the user at the start of P6 (the "weekly report on Sunday night" and
+the content list — averages, days on/over target, weight trend, best/worst day — were
+already locked; these pin the open parameters):
+
+- **Week window = the ISO calendar week (Mon–Sun), Europe/Bucharest.** Both paths use
+  the *same* window: Monday of the current week through the report's reference day.
+  On demand, `/saptamana` covers Monday → **today** (the week so far); the scheduled
+  Sunday-night report runs on Sunday, so Monday → today is the **full Mon–Sun** that
+  just ended — one rule, no special "previous week" case. Chosen over a rolling
+  last-7-days window because "this week" matches how she thinks of it and the Sunday
+  report lands cleanly on a completed week.
+- **Averages count every elapsed day in the window (unlogged days = 0 kcal), not only
+  days she logged.** The denominator is the number of days from Monday through the
+  reference day (7 on Sunday, fewer mid-week) — *not* a fixed 7, so a mid-week
+  `/saptamana` isn't dragged down by days that haven't happened yet. (The user picked
+  "all days, unlogged = 0" over "only days with meals"; applying it to the *elapsed*
+  window is the faithful reading.) The report also shows `mese: X/N zile` so the
+  logged-day count stays visible.
+- **Days on/over/under target classify only days with at least one meal logged**, using
+  the **same band as the daily note** (<90 % under, 90–110 % on target, >110 % over).
+  An unlogged day is *not* counted as "under" — it's absent from the classification
+  (shown via the `X/N zile` line instead), so "0 kcal because she didn't log" never
+  masquerades as "ate too little". Needs a profile/target; omitted (with a `/profil`
+  hint) when there's none.
+- **Best / worst day = closest / furthest from the kcal target** by absolute %
+  deviation (over OR under), among logged days. Respects her goal (a very-low day
+  isn't "best"). Needs a profile; the section is omitted without one. With a single
+  logged day, only "best" is shown (best == worst); identical-deviation ties also
+  collapse to one line.
+- **Weight trend = first → last weigh-in within the window** (delta with 📈/📉/➡️). One
+  weigh-in shows the value only; none in the window falls back to the latest known
+  weight across all days (with its date) and notes "fără cântăriri săptămâna asta";
+  no weigh-in ever → "—".
+- **Empty week → short nudge** (like the daily empty case). "Empty" = no meals **and**
+  no weigh-ins in the window (the two things the weekly report is about; activity/water
+  aren't part of the weekly content per the plan, so they don't keep a week from being
+  "empty").
+- **Sunday delivery — daily first, then weekly, both at 21:00.** The existing 21:00
+  cron now calls one orchestrator (`send_evening_summaries`) that always sends the
+  daily summary and, on Sundays, sends the weekly report right after (sequential
+  `await`, so the order is guaranteed — two messages). Kept as one job rather than a
+  second same-time cron so ordering is deterministic; the daily habit stays unbroken.
+- **One shared path for both weekly outputs**, mirroring P5: `repository.get_week_summary`
+  gathers a `WeekSummary` DTO (per-day stats + window weigh-ins + latest weight +
+  profile) and `strings.format_weekly_report` renders it; both `/saptamana` and the
+  scheduler call exactly these, so on-demand and scheduled reports are identical.

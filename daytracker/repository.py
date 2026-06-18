@@ -7,7 +7,7 @@ Keeps SQLAlchemy session handling out of the handlers. All target math stays in
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select
@@ -394,6 +394,143 @@ async def get_day_summary(
         water_ml=await get_day_water_ml(
             session, telegram_user_id=telegram_user_id, log_date=log_date
         ),
+        latest_weight=await get_latest_weight(session, telegram_user_id=telegram_user_id),
+        profile=await get_profile(session, telegram_user_id),
+    )
+
+
+# --- Weekly report: per-day stats over a Mon–Sun window (P6) -------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DayStat:
+    """One calendar day's meal totals within a weekly window (0-filled if unlogged)."""
+
+    log_date: date
+    kcal: int
+    protein_g: int
+    carbs_g: int
+    fat_g: int
+    meals: int
+
+    @property
+    def has_meals(self) -> bool:
+        return self.meals > 0
+
+
+@dataclass(frozen=True, slots=True)
+class WeekSummary:
+    """Everything the weekly report needs, gathered in a single read.
+
+    Shared by ``/saptamana`` and the scheduled Sunday-night job so both render
+    identical output. The window is the ISO calendar week (Monday → ``end_date``);
+    on the Sunday job ``end_date`` is that Sunday, so it spans the full Mon–Sun
+    (DECISIONS.md, 2026-06-18). ``days`` holds one entry per *elapsed* day in the
+    window (unlogged days 0-filled); averages divide by ``num_days``.
+    """
+
+    start_date: date
+    end_date: date
+    num_days: int
+    days: list[DayStat]
+    weigh_ins: list[WeightLog]  # weigh-ins within the window, oldest → newest
+    latest_weight: WeightLog | None  # latest across all days (fallback for the trend)
+    profile: Profile | None
+
+    @property
+    def days_with_meals(self) -> int:
+        return sum(1 for day in self.days if day.has_meals)
+
+    @property
+    def total_kcal(self) -> int:
+        return sum(day.kcal for day in self.days)
+
+    @property
+    def total_protein_g(self) -> int:
+        return sum(day.protein_g for day in self.days)
+
+    @property
+    def total_carbs_g(self) -> int:
+        return sum(day.carbs_g for day in self.days)
+
+    @property
+    def total_fat_g(self) -> int:
+        return sum(day.fat_g for day in self.days)
+
+    @property
+    def avg_kcal(self) -> int:
+        return round(self.total_kcal / self.num_days)
+
+    @property
+    def avg_protein_g(self) -> int:
+        return round(self.total_protein_g / self.num_days)
+
+    @property
+    def avg_carbs_g(self) -> int:
+        return round(self.total_carbs_g / self.num_days)
+
+    @property
+    def avg_fat_g(self) -> int:
+        return round(self.total_fat_g / self.num_days)
+
+    @property
+    def is_empty(self) -> bool:
+        """True when the week has no meals *and* no weigh-ins (the report's subjects)."""
+        return self.days_with_meals == 0 and not self.weigh_ins
+
+
+async def get_week_summary(
+    session: AsyncSession, *, telegram_user_id: int, end_date: date
+) -> WeekSummary:
+    """Gather the weekly report for the ISO week containing ``end_date`` (Mon → end_date)."""
+    start_date = end_date - timedelta(days=end_date.weekday())  # Monday of that week
+    num_days = (end_date - start_date).days + 1
+
+    stmt = (
+        select(
+            Meal.log_date,
+            func.coalesce(func.sum(Meal.total_kcal), 0),
+            func.coalesce(func.sum(Meal.total_protein_g), 0),
+            func.coalesce(func.sum(Meal.total_carbs_g), 0),
+            func.coalesce(func.sum(Meal.total_fat_g), 0),
+            func.count(Meal.id),
+        )
+        .where(
+            Meal.telegram_user_id == telegram_user_id,
+            Meal.log_date >= start_date,
+            Meal.log_date <= end_date,
+        )
+        .group_by(Meal.log_date)
+    )
+    by_date: dict[date, DayStat] = {
+        row[0]: DayStat(row[0], int(row[1]), int(row[2]), int(row[3]), int(row[4]), int(row[5]))
+        for row in (await session.execute(stmt)).all()
+    }
+    days = [
+        by_date.get(day, DayStat(day, 0, 0, 0, 0, 0))
+        for day in (start_date + timedelta(days=offset) for offset in range(num_days))
+    ]
+
+    weigh_ins = list(
+        (
+            await session.scalars(
+                select(WeightLog)
+                .where(
+                    WeightLog.telegram_user_id == telegram_user_id,
+                    WeightLog.log_date >= start_date,
+                    WeightLog.log_date <= end_date,
+                )
+                .order_by(WeightLog.created_at, WeightLog.id)
+            )
+        ).all()
+    )
+
+    return WeekSummary(
+        start_date=start_date,
+        end_date=end_date,
+        num_days=num_days,
+        days=days,
+        weigh_ins=weigh_ins,
         latest_weight=await get_latest_weight(session, telegram_user_id=telegram_user_id),
         profile=await get_profile(session, telegram_user_id),
     )

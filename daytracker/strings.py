@@ -16,7 +16,7 @@ from .targets import Activity, Goal, Sex
 if TYPE_CHECKING:
     from .estimator import MealEstimate
     from .models import ActivityLog, Meal, Profile, WeightLog
-    from .repository import DaySummary, DayTotals, LastEntry
+    from .repository import DayStat, DaySummary, DayTotals, LastEntry, WeekSummary
 
 
 def _esc(text: str) -> str:
@@ -418,3 +418,149 @@ def format_summary(summary: DaySummary) -> str:
     lines.append("")
     lines.append(_pick_summary_note(summary))
     return "\n".join(lines)
+
+
+# --- Raport săptămânal (P6) ----------------------------------------------------
+
+# Shown when nothing was logged all week (no meals and no weigh-ins in the window).
+SAPTAMANA_EMPTY = "Săptămâna asta n-ai înregistrat nimic. 🤔\nHai să reluăm de mâine! 💪"
+
+# "On target" band, same as the daily note (DECISIONS.md, 2026-06-18): a day is on
+# target within ±10 % of the kcal target, under below 90 %, over above 110 %.
+_TARGET_UNDER = 0.9
+_TARGET_OVER = 1.1
+
+
+def _fmt_date_range(start: date, end: date) -> str:
+    """e.g. 15.06–21.06.2026 (start without the year, end with it)."""
+    return f"{start.strftime('%d.%m')}–{end.strftime('%d.%m.%Y')}"
+
+
+def _zile(n: int) -> str:
+    """Romanian day count: 1 → '1 zi', else 'N zile' (the window is ≤ 7 days)."""
+    return f"{n} {'zi' if n == 1 else 'zile'}"
+
+
+def _format_week_averages(week: WeekSummary) -> str:
+    """Daily averages over the window; vs targets when a profile exists."""
+    profile = week.profile
+    lines = ["📊 <b>Medie zilnică</b>"]
+    if profile is not None and profile.target_kcal:
+        pct = round(week.avg_kcal / profile.target_kcal * 100)
+        lines.append(f"🔥 Calorii: <b>{week.avg_kcal}</b>/{profile.target_kcal} kcal ({pct}%)")
+        lines.append(
+            f"🥩 {week.avg_protein_g}/{profile.target_protein_g} g · "
+            f"🍞 {week.avg_carbs_g}/{profile.target_carbs_g} g · "
+            f"🥑 {week.avg_fat_g}/{profile.target_fat_g} g"
+        )
+    else:
+        lines.append(f"🔥 Calorii: <b>{week.avg_kcal}</b> kcal")
+        lines.append(f"🥩 {week.avg_protein_g} g · 🍞 {week.avg_carbs_g} g · 🥑 {week.avg_fat_g} g")
+    return "\n".join(lines)
+
+
+def _format_week_targets(week: WeekSummary) -> str | None:
+    """Counts of logged days that landed on / over / under the kcal target.
+
+    Only days with a logged meal are classified (an unlogged day is *not* counted as
+    "under"); needs a profile target. Returns ``None`` when neither applies.
+    """
+    profile = week.profile
+    if profile is None or not profile.target_kcal:
+        return None
+    logged = [day for day in week.days if day.has_meals]
+    if not logged:
+        return None
+    on = over = under = 0
+    for day in logged:
+        ratio = day.kcal / profile.target_kcal
+        if ratio < _TARGET_UNDER:
+            under += 1
+        elif ratio > _TARGET_OVER:
+            over += 1
+        else:
+            on += 1
+    return (
+        "🎯 <b>Zile vs țintă</b>\n"
+        f"✅ Pe țintă: {_zile(on)} · 📈 Peste: {_zile(over)} · 📉 Sub: {_zile(under)}"
+    )
+
+
+def _format_week_extremes(week: WeekSummary) -> str | None:
+    """Best (closest to target) and worst (furthest) logged day, by % deviation."""
+    profile = week.profile
+    if profile is None or not profile.target_kcal:
+        return None
+    logged = [day for day in week.days if day.has_meals]
+    if not logged:
+        return None
+    target = profile.target_kcal
+
+    def deviation(day: DayStat) -> float:
+        return abs(day.kcal / target - 1)
+
+    best = min(logged, key=deviation)
+    lines = [
+        f"⭐ <b>Cea mai bună zi:</b> {best.log_date.strftime('%d.%m')} — "
+        f"{best.kcal} kcal ({round(best.kcal / target * 100)}% din țintă)"
+    ]
+    worst = max(logged, key=deviation)
+    if worst.log_date != best.log_date:
+        lines.append(
+            f"📌 <b>Cea mai îndepărtată de țintă:</b> {worst.log_date.strftime('%d.%m')} — "
+            f"{worst.kcal} kcal ({round(worst.kcal / target * 100)}% din țintă)"
+        )
+    return "\n".join(lines)
+
+
+def _format_week_weight(week: WeekSummary) -> str:
+    """Weight trend: first → last weigh-in within the window, with the change."""
+    weigh_ins = week.weigh_ins
+    if len(weigh_ins) >= 2:
+        first, last = weigh_ins[0], weigh_ins[-1]
+        delta = last.weight_kg - first.weight_kg
+        if delta > 0.05:
+            change = f"📈 +{_fmt_num(delta)} kg"
+        elif delta < -0.05:
+            change = f"📉 {_fmt_num(delta)} kg"
+        else:
+            change = "➡️ stabilă"
+        return (
+            f"⚖️ <b>Greutate:</b> {_fmt_num(first.weight_kg)} → "
+            f"{_fmt_num(last.weight_kg)} kg ({change})"
+        )
+    if len(weigh_ins) == 1:
+        return f"⚖️ <b>Greutate:</b> {_fmt_num(weigh_ins[0].weight_kg)} kg (o singură cântărire)"
+    if week.latest_weight is not None:
+        weight = week.latest_weight
+        return (
+            f"⚖️ <b>Greutate:</b> {_fmt_num(weight.weight_kg)} kg "
+            f"<i>({weight.log_date.strftime('%d.%m')})</i> — fără cântăriri săptămâna asta"
+        )
+    return "⚖️ <b>Greutate:</b> —"
+
+
+def format_weekly_report(week: WeekSummary) -> str:
+    """The weekly report used by both /saptamana and the Sunday-night auto-report.
+
+    Same data → same text, so the two outputs match (PLAN.md P6 acceptance).
+    """
+    header = f"📈 <b>Raport săptămânal</b> ({_fmt_date_range(week.start_date, week.end_date)})"
+    if week.is_empty:
+        return f"{header}\n\n{SAPTAMANA_EMPTY}"
+
+    blocks = [header, "", f"🍽️ <b>Mese:</b> {week.days_with_meals}/{week.num_days} zile", ""]
+    blocks.append(_format_week_averages(week))
+
+    for section in (_format_week_targets(week), _format_week_extremes(week)):
+        if section is not None:
+            blocks.append("")
+            blocks.append(section)
+
+    blocks.append("")
+    blocks.append(_format_week_weight(week))
+
+    if week.profile is None or not week.profile.target_kcal:
+        blocks.append("")
+        blocks.append("💡 Scrie /profil ca să-ți pot raporta și zilele pe țintă.")
+    return "\n".join(blocks)

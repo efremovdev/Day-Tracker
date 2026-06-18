@@ -293,3 +293,54 @@ then mark **[DONE]**.
 - **P5 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
 - No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P6: Weekly
   report** (`/saptamana` on demand + the Sunday-night report).
+
+---
+
+## 2026-06-18 — P6 Weekly report (implementation)
+
+Claimed P6 (flipped to [IN PROGRESS]). Confirmed the open params with the user first
+(see today's DECISIONS entry): the window is the **ISO calendar week (Mon→reference
+day)** — same rule for `/saptamana` (Mon→today) and the Sunday job (Mon→Sun); averages
+divide by **all elapsed days** in the window (unlogged = 0); the Sunday report fires at
+**21:00 after** the daily summary (one orchestrator job, sequential); best/worst =
+**closest/furthest from the kcal target**.
+
+Built the weekly report, on demand and scheduled:
+- `repository.py` — `DayStat` (one calendar day's meal totals) + `WeekSummary` DTO
+  (per-day stats, window weigh-ins, latest-weight fallback, profile; totals/averages
+  and `is_empty` as properties). `get_week_summary` does one grouped per-day meal query
+  over `Monday..end_date`, 0-fills unlogged days, pulls in-window weigh-ins (oldest→
+  newest), latest weight, and the profile — the single source both paths read.
+- `strings.py` — `format_weekly_report` (header + date range, `mese X/N zile`, daily
+  averages vs targets %, days on/over/under target, best/worst day, weight trend) with
+  helpers and `SAPTAMANA_EMPTY`. On-target band reuses the daily ±10 % thresholds
+  (`_TARGET_UNDER`/`_TARGET_OVER`). Empty week → nudge; no-profile → averages + weight +
+  `/profil` hint (target-relative sections omitted).
+- `handlers/summary.py` — added `/saptamana` (replies with the shared formatter over
+  `get_week_summary`); updated the module docstring (now daily P5 + weekly P6).
+- `scheduler.py` — `send_weekly_report` (same gather+format, posts to the remembered
+  chat) and a `send_evening_summaries` orchestrator: always the daily summary, then on
+  Sundays the weekly report (sequential `await` → daily first; each send wraps its own
+  errors). The 21:00 cron now calls the orchestrator (job id `daily_summary` →
+  `evening_summaries`).
+- `bot.py` — updated the scheduler start log to mention the Sunday weekly report. No
+  new tables, no schema change, no new deps.
+
+Verified: `ruff` + `black --check` pass; package imports clean; offline smoke test
+passes — `get_week_summary` math (3 logged days of a seeded Mon–Sun week: avg 797
+kcal/day, totals exclude prev/next-week meals; window weigh-ins 70→69), the populated
+report (date range, `3/7 zile`, on/over/under = 1/1/1, best=Mon 99 %, worst=Wed 60 %,
+trend `70 → 69 kg 📉 -1 kg`), **empty-week nudge**, **no-profile** report (no targets/
+best-worst, `/profil` hint), **old-weigh fallback** ("fără cântăriri săptămâna asta"),
+**mid-week window** (num_days shrinks to 3, future day excluded), and the **scheduler**
+(Sunday → daily *then* weekly with the weekly matching `/saptamana`; non-Sunday → daily
+only; `create_scheduler` builds one 21:00 `evening_summaries` job).
+
+Choices within P6 scope (no new architectural decisions needed): one grouped query +
+0-fill rather than 7 per-day reads; classification thresholds reuse the daily band;
+P5's daily `_pick_summary_note` left untouched (no rewrite of working code).
+
+**Pending (live acceptance):** user runs `/saptamana` and confirms the weekly report is
+correct (averages, days on/over target, weight trend, best/worst day) over her real
+week; confirms the Sunday-night auto-report fires at 21:00 after the daily summary and
+matches `/saptamana`. P6 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.

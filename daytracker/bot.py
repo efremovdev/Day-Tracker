@@ -67,7 +67,10 @@ async def run_bot() -> None:
         # Long-polling only (no webhooks); drop anything queued while we were down.
         await bot.delete_webhook(drop_pending_updates=True)
         scheduler.start()
-        logger.info("Scheduler started (daily summary at 21:00 %s).", settings.timezone)
+        logger.info(
+            "Scheduler started (daily summary 21:00 %s; weekly report Sunday 21:00).",
+            settings.timezone,
+        )
         # These are propagated to handlers as contextual kwargs (by name).
         await dp.start_polling(bot, sessionmaker=sessionmaker, estimator=estimator, tz=tz)
     finally:

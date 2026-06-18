@@ -95,3 +95,33 @@ Active bugs, gotchas, workarounds. Append with date.
   reply remains unescaped (carried over from the P4 note). Out of P5 scope; P7 hardening.
 - **Schema is additive.** An existing `daytracker.db` gains `user_chats` via
   `create_all` on next start — no migration, no data loss.
+
+## 2026-06-18 — P6 notes
+
+- **No new tables in P6.** The weekly report is pure read/rollup over existing rows
+  (`meals`, `weight_logs`, `profiles`) — nothing to migrate.
+- **Scheduler downtime still applies (P7).** The weekly report shares the same
+  in-memory APScheduler job as the daily summary, so if the process is *down* at
+  Sunday 21:00 the weekly report is missed, not replayed. Same restart-safety caveat
+  as P5; `misfire_grace_time=3600` only covers a brief in-loop delay.
+- **The 21:00 job id changed `daily_summary` → `evening_summaries`.** It now sends the
+  daily summary and, on Sundays, the weekly report after it. APScheduler is not
+  persisted (jobs are rebuilt on every boot), so the renamed id is harmless — there's
+  no stale persisted job to reconcile.
+- **Sunday sends two messages.** By design (daily then weekly). If Telegram throttles
+  back-to-back sends, the weekly could be delayed slightly; not observed, revisit only
+  if it happens.
+- **Day classification (on/over/under) counts only days with a logged meal.** An
+  unlogged day is shown via `mese: X/N zile`, not counted as "under target". Averages,
+  by contrast, divide by *all* elapsed days in the window (unlogged = 0 kcal) — the two
+  use different denominators on purpose (DECISIONS.md, 2026-06-18).
+- **Best/worst and on-target need a profile.** Without one, the report still shows
+  averages + weight trend and a `/profil` hint, but omits the target-relative sections
+  (no kcal target to compare against).
+- **Weight trend is within-window first → last weigh-in.** A week with a single
+  weigh-in shows just the value; a week with none falls back to the latest known weight
+  (with its date). It does **not** compare against the previous week's weight — a
+  cross-week delta could be a P9 nicety.
+- **Same unescaped-`/masa`-reply note carries over.** Meal `raw_text` isn't shown in the
+  weekly report (only aggregates/dates are), so there's no new escaping surface here;
+  the older unescaped `/masa` item-name reply remains a P7 hardening item.
