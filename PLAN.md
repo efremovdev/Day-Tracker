@@ -61,7 +61,7 @@ Acceptance:
 
 ---
 
-## P4: Activity, water, weight + corrections [IN PROGRESS]
+## P4: Activity, water, weight + corrections [DONE 2026-06-18]
 
 Requirements:
 - `/activitate <text>` (log only, no calorie add-back).

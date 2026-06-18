@@ -212,3 +212,18 @@ shows them with totals vs targets, and runs `/sterge` to confirm it removes the 
 entry (with confirmation) and totals update. Also confirm a `/activitate` **photo
 caption** in the privacy-OFF group. P4 stays **[IN PROGRESS]** until that passes → then
 mark **[DONE]**.
+
+---
+
+## 2026-06-18 — P4 closed
+
+- User ran the live acceptance test: `/activitate`, `/apa`, and `/cantar` each logged
+  correctly and appeared in `/azi` with running totals vs targets, and `/sterge` removed
+  the right entry (with confirmation) and totals updated. ✅
+- Re-verified the static gate before closing: `ruff` + `black --check` pass; working tree
+  clean. (The P4 offline smoke test passed during implementation: additive water sum,
+  cross-type last-entry ordering, meal delete cascading to items + totals, formatters,
+  HTML escaping, dispatcher wiring.)
+- **P4 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
+- No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P5: Daily summary**
+  (`/sumar` on demand + the 21:00 Europe/Bucharest auto-summary via APScheduler).
