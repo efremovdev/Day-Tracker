@@ -163,3 +163,35 @@ Still open / accepted:
   and logs the traceback; the meal path keeps its own specific messages.
 - **Schema is additive.** An existing `daytracker.db` gains `summary_deliveries` via
   `create_all` on next start — no migration, no data loss.
+
+## 2026-06-18 — P8 notes
+
+- **No code/schema change in P8.** It adds only deploy artifacts (`Dockerfile`,
+  `.dockerignore`, `docker-compose.yml`, README deploy guide, `.env.example` note) —
+  no new tables, no handler changes. `create_all` still runs on first boot in the
+  container and creates the DB on the persistent volume.
+- **Docker build not verifiable locally.** Docker isn't installed on the dev Mac, so
+  the image build + container run is part of the P8 *live* acceptance (build on the VM,
+  confirm it polls, confirm a redeploy keeps data). `ruff` / `black` / `pytest` (the
+  Python gate) still pass unchanged.
+- **`docker compose down -v` deletes the database.** Plain `down` keeps the
+  `daytracker-data` volume; `-v` removes it. Documented in the README; the backup
+  command (`docker compose cp bot:/data/daytracker.db …`) is the safeguard.
+- **`DATABASE_PATH` is pinned by compose.** Compose sets it to `/data/daytracker.db`
+  via `environment:` (which overrides `env_file`), so a stray `DATABASE_PATH` in the
+  server `.env` can't relocate the DB onto the ephemeral container layer. If someone
+  runs the image *without* compose, the Dockerfile `ENV` default still points at
+  `/data` — but then they must mount a volume there themselves or data is ephemeral.
+- **Named volume vs bind mount + non-root.** The image runs as uid 10001 and creates
+  `/data` with that ownership, so a fresh **named** volume inherits writable ownership
+  on first creation (works out of the box). If a user swaps to a **bind mount**
+  (`./data:/data`), the host dir keeps host ownership and they must `chown 10001:10001`
+  it (or run rootful) — bind mounts don't copy image ownership. Named volume is the
+  documented default for this reason.
+- **Oracle ARM capacity can be "out of stock."** `VM.Standard.A1.Flex` (Ampere ARM) is
+  often unavailable in popular regions. Fallbacks, both Always Free and unchanged in the
+  guide: the x86 `VM.Standard.E2.1.Micro`, or a Google Cloud `e2-micro` VM. The
+  Docker/compose flow is identical on any of them.
+- **OS/base-image patches need a rebuild.** Security updates to `python:3.12-slim` and
+  the OS packages land via `docker compose up -d --build` (which re-pulls the base and
+  re-installs deps), not automatically. A periodic redeploy keeps the image current.

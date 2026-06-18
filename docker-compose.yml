@@ -1,0 +1,24 @@
+# Run DayTracker as a 24/7 long-polling worker.
+#   docker compose up -d --build      # start / redeploy
+#   docker compose logs -f            # follow logs
+#   docker compose down               # stop (data is kept on the volume)
+services:
+  bot:
+    build: .
+    image: daytracker:latest
+    container_name: daytracker
+    # Secrets/config come from the host .env at run time (never baked into the image).
+    env_file: .env
+    environment:
+      # Authoritative DB location: inside the persistent volume mounted below.
+      # Set here (overrides any DATABASE_PATH in .env) so a redeploy can never put
+      # the DB on the ephemeral container layer and lose data.
+      DATABASE_PATH: /data/daytracker.db
+    volumes:
+      - daytracker-data:/data
+    # Auto-restart on crash and on VM reboot, but honor a deliberate manual stop.
+    restart: unless-stopped
+
+volumes:
+  # Named volume: survives `up --build` and `down`; removed only with `down -v`.
+  daytracker-data:

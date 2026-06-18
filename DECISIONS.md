@@ -276,3 +276,45 @@ open parameters):
   meal-estimation path keeps its own specific error/clarify messages. Free-text inputs
   (`/masa`, `/activitate`) are length-capped, and the older `/masa` reply now
   HTML-escapes LLM item names/notes (the escaping gap carried forward since P4).
+
+## 2026-06-18 — P8 deployment (host finalized)
+
+The P8 scope (Dockerfile + run-as-worker, free host, secrets/env, auto-restart,
+deploy guide) was already locked; this finalizes the open parameter — the **host** —
+which the 2026-06-17 Hosting entry deferred to P8. The user expressed no preference,
+so the choice was made on the "free 24/7" requirement:
+
+- **Host = Oracle Cloud Always Free VM (Ubuntu) running Docker.** Picked over Fly.io
+  because **Fly.io's free allowance ended in 2024** — it is now usage-based, requires
+  a card, and a single always-on machine costs ~$2/mo, i.e. not reliably $0 (the same
+  reason Railway/Render were deprioritized in the 2026-06-17 entry). Oracle's Always
+  Free tier is genuinely free **forever**. The deploy guide is a generic "Ubuntu VM +
+  Docker" flow, so it transfers unchanged to a **Google Cloud `e2-micro` Always Free
+  VM** (or any always-on VM) if Oracle ARM capacity is unavailable in the user's region
+  — only the instance-provisioning steps differ. Not locked to one vendor.
+- **Long-polling ⇒ no inbound ports, no public URL, no TLS.** The worker only makes
+  *outbound* calls (Telegram getUpdates, Gemini), so the VM needs no open ingress and
+  no reverse proxy — a real simplification over a webhook deploy and a reason to keep
+  long-polling for hosting too (honors the 2026-06-17 long-polling decision).
+- **Containerized, not bare-metal.** A single-stage `python:3.12-slim` image runs
+  `python -m daytracker` as a **non-root** user; `docker compose` manages it. Chosen
+  over a bare `systemd` + venv setup because the image pins the exact runtime and deps
+  and makes "redeploy" a one-liner (`git pull && docker compose up -d --build`),
+  identical on any host.
+- **Persistence = a named Docker volume for the SQLite file.** The DB lives at
+  `/data/daytracker.db` on a named volume (`daytracker-data`) that survives
+  `up --build` / `down` (it is only removed with an explicit `down -v`), so a redeploy
+  never loses data — the P8 acceptance. `DATABASE_PATH=/data/daytracker.db` is set in
+  compose's `environment:` (which wins over `env_file`), so a stray `DATABASE_PATH` in
+  the server `.env` can't accidentally relocate the DB onto the ephemeral container
+  layer. The image creates `/data` owned by the non-root user, so the fresh named
+  volume inherits writable ownership on first creation.
+- **Auto-restart = `restart: unless-stopped`.** The container comes back after a crash
+  (the process exits non-zero on an unhandled error → container exits → restart) and
+  after a VM reboot (Docker enabled at boot), but honors a deliberate manual stop.
+  Combined with the P7 startup catch-up, a reboot near 21:00 still delivers the day's
+  summary once on the way back up.
+- **Secrets via a host `.env`, never in the image.** `.env` is `.dockerignore`d and
+  `.gitignore`d; compose reads it from the host at run time (`env_file: .env`). The
+  image carries no token/key. `MACRO_PROVIDER=gemini` in production (the `fake`
+  provider stays a local-dev/test aid).

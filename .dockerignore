@@ -1,0 +1,39 @@
+# Keep the build context (and the image) small and free of secrets/data.
+.git
+.gitignore
+
+# Secrets & local data — never bake these into the image. The bot reads .env
+# from the host at run time via docker-compose (env_file), and the SQLite DB
+# lives on a named volume, not in the image.
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+
+# Virtual environments
+.venv
+venv
+env
+
+# Python / build artifacts
+__pycache__
+*.py[cod]
+*.egg-info
+.eggs
+build
+dist
+
+# Tooling caches
+.ruff_cache
+.pytest_cache
+.mypy_cache
+
+# Not needed at runtime
+tests
+*.md
+.claude
+.DS_Store
+Dockerfile
+.dockerignore
+docker-compose.yml

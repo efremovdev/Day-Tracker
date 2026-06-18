@@ -112,7 +112,7 @@ Acceptance:
 
 ---
 
-## P8: Deployment — free cloud, 24/7 [TODO]
+## P8: Deployment — free cloud, 24/7 [IN PROGRESS]
 
 Requirements:
 - Dockerfile + run-as-worker config.

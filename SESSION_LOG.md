@@ -431,3 +431,48 @@ summary once). P7 stays **[IN PROGRESS]** until that passes → then mark **[DON
 - No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P8: Deployment**
   (Dockerfile + run-as-worker, free 24/7 host, secrets/env, deploy guide) — runs 24/7
   in the cloud and survives a redeploy without losing data.
+
+---
+
+## 2026-06-18 — P8 Deployment (implementation)
+
+Claimed P8 (flipped to [IN PROGRESS]). The one open parameter — the **host** (deferred
+to P8 by the 2026-06-17 Hosting entry) — was finalized with the user (no preference, so
+chosen on the "free 24/7" requirement; see today's DECISIONS entry): **Oracle Cloud
+Always Free VM running Docker**, picked over Fly.io because Fly's free allowance ended in
+2024 (now usage-based, ~$2/mo — not reliably $0, the same reason Railway/Render were
+dropped). The deploy guide is a generic Ubuntu-VM + Docker flow, so it transfers to a
+Google Cloud `e2-micro` (or any always-on VM) if Oracle ARM capacity is unavailable.
+
+Built the deployment artifacts (no app code/schema change — pure ops):
+- `Dockerfile` — single-stage `python:3.12-slim`, non-root user (uid 10001),
+  `pip install .`, `CMD python -m daytracker`. Creates `/data` owned by the user (so a
+  fresh named volume inherits writable ownership) and pins `DATABASE_PATH=/data/daytracker.db`.
+- `docker-compose.yml` — `bot` service, `env_file: .env`, `restart: unless-stopped`,
+  named volume `daytracker-data:/data`, and `DATABASE_PATH` set in `environment:` (wins
+  over `.env`) so a redeploy can never relocate the DB onto the ephemeral layer.
+- `.dockerignore` — keeps secrets (`.env`), data (`*.db`), venv, caches, tests and docs
+  out of the image/build context.
+- `.env.example` — note that Docker overrides `DATABASE_PATH` to the volume path.
+- `README.md` — new **Deployment** section (Docker quickstart, redeploy/stop/restart,
+  auto-restart, Oracle Always Free VM provisioning, backups); updated the Hosting line
+  and the stale Status block (was Phase 5 → now Phase 8 IN PROGRESS, P5–P7 listed done).
+
+Long-polling is outbound-only, so the host needs **no inbound ports, no public URL, no
+TLS** — recorded in DECISIONS as a deploy simplification.
+
+Verified: `ruff` + `black --check` pass and the **56 unit tests pass** (no Python
+changed, re-run per the working agreement). Docker isn't installed on the dev Mac, so the
+image build is deferred to live acceptance; as a proxy, `pip wheel . --no-deps` builds the
+package cleanly (validating the Dockerfile's `pip install .` step, entry point and package
+layout). Confirmed `.env` and `daytracker.db` are gitignored and not staged.
+
+Choices within P8 scope (no new architectural decisions beyond the host): named volume
+(not bind mount) so non-root ownership "just works"; `restart: unless-stopped` (crash +
+reboot, honors manual stop); containerized over bare systemd (pins runtime + one-line
+redeploy).
+
+**Pending (live acceptance):** user provisions the Always Free VM, installs Docker,
+clones the repo, fills `.env`, runs `docker compose up -d --build`, confirms the bot polls
+24/7, and confirms a redeploy (`git pull && docker compose up -d --build`) preserves the
+logged data. P8 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.

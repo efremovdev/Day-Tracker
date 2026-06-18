@@ -9,7 +9,7 @@ A Telegram bot that helps one person track daily nutrition and activity, in Roma
 - **LLM macro estimation** behind a swappable provider — default **Google Gemini Flash (free tier)**; upgradeable to Claude or OpenAI with no rewrite
 - **APScheduler** for the daily (21:00) and weekly (Sunday) reports
 - **Timezone:** Europe/Bucharest
-- **Hosting:** free cloud, running as a long-polling worker (host finalized in P8)
+- **Hosting:** free cloud, running as a long-polling worker — Docker on an **Oracle Cloud Always Free VM** (see [Deployment](#deployment-247-on-a-free-cloud-vm))
 
 ## Who it's for
 
@@ -65,6 +65,69 @@ black --check .
 pytest                 # unit tests (target math + macro-JSON parsing)
 ```
 
+## Deployment (24/7 on a free cloud VM)
+
+The bot runs as a **long-polling worker** — it only makes *outbound* calls (Telegram +
+Gemini), so the host needs **no open ports, no public URL, and no TLS**. It's packaged as
+a Docker image and managed with `docker compose`; the SQLite database lives on a named
+volume so it **survives a redeploy**.
+
+### Run with Docker (any machine)
+
+```bash
+cp .env.example .env           # fill in BOT_TOKEN, TRACKED_USER_ID, GEMINI_API_KEY
+docker compose up -d --build   # build + start in the background
+docker compose logs -f         # follow logs (Ctrl+C to stop following)
+```
+
+`MACRO_PROVIDER` should be `gemini` in production. The DB path is set automatically by
+`docker-compose.yml` to `/data/daytracker.db` on the `daytracker-data` volume — **don't**
+override `DATABASE_PATH` in `.env` for the container.
+
+- **Redeploy (new code):** `git pull && docker compose up -d --build` — the volume (and
+  thus all logged data) is untouched.
+- **Stop / start:** `docker compose down` keeps the data; `docker compose up -d` brings it
+  back. Only `docker compose down -v` deletes the volume (and the database).
+- **Auto-restart:** the container is set to `restart: unless-stopped`, so it comes back
+  after a crash or a VM reboot. If a 21:00 summary was missed while the VM was down, the
+  startup catch-up delivers it once on the way back up.
+
+### Host: Oracle Cloud Always Free VM
+
+Oracle's *Always Free* tier is genuinely free forever (unlike Fly.io's allowance, which
+ended in 2024). The steps below are a generic "Ubuntu VM + Docker" flow — they work
+unchanged on a **Google Cloud `e2-micro` Always Free** instance (or any always-on VM) if
+Oracle's ARM capacity is unavailable in your region.
+
+1. **Create the instance.** In the [Oracle Cloud Console](https://cloud.oracle.com/) →
+   *Compute → Instances → Create instance*. Pick an **Always Free–eligible** shape
+   (`VM.Standard.A1.Flex` ARM if available, otherwise `VM.Standard.E2.1.Micro` x86) and
+   the **Ubuntu 22.04/24.04** image. Add your SSH public key. No ingress rules are needed
+   (long-polling is outbound-only) — leave the default security list.
+2. **SSH in:** `ssh ubuntu@<public-ip>`.
+3. **Install Docker + the compose plugin** and enable it at boot:
+   ```bash
+   sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git
+   sudo systemctl enable --now docker
+   sudo usermod -aG docker $USER && newgrp docker   # run docker without sudo
+   ```
+4. **Get the code and configure secrets:**
+   ```bash
+   git clone <your-repo-url> daytracker && cd daytracker
+   cp .env.example .env
+   nano .env                      # set BOT_TOKEN, TRACKED_USER_ID, GEMINI_API_KEY
+   ```
+5. **Launch:** `docker compose up -d --build`, then `docker compose logs -f` to confirm
+   it started (`Database ready…`, `Scheduler started…`, `Start polling`).
+
+### Backups
+
+The whole state is one SQLite file on the named volume. To copy it off the host:
+
+```bash
+docker compose cp bot:/data/daytracker.db ./daytracker-backup.db
+```
+
 ## Documentation
 
 - `PLAN.md` — phased roadmap
@@ -75,11 +138,12 @@ pytest                 # unit tests (target math + macro-JSON parsing)
 
 ## Status
 
-**Phase 5 — Daily summary. IN PROGRESS.** `/sumar` shows today's summary on demand (kcal + macros vs targets, per-meal list, activity, water, latest known weight, and a short encouraging note), and an APScheduler job posts the same summary automatically at 21:00 Europe/Bucharest. The auto-summary is delivered to the chat the tracked user last wrote in (the bot remembers it), so it follows her between the group and a private chat. (Pending live acceptance.)
-
-**Next: Phase 6 — Weekly report** (`/saptamana` + the Sunday-night report).
+**Phase 8 — Deployment. IN PROGRESS.** The bot is containerized (`Dockerfile`) and runs as a 24/7 long-polling worker via `docker compose`, with the SQLite database on a named volume so a redeploy keeps all data. Target host is an **Oracle Cloud Always Free VM** (the steps work on any Ubuntu VM, e.g. a Google Cloud `e2-micro`). See [Deployment](#deployment-247-on-a-free-cloud-vm). (Pending live acceptance: running it in the cloud and confirming a redeploy preserves data.)
 
 Done so far:
+- **Phase 7 — Hardening:** LLM retry/backoff with model fall-through, a generic-error handler, restart-safe (idempotent, catch-up) summaries, input length caps, and unit tests (target math + macro-JSON parsing).
+- **Phase 6 — Weekly report:** `/saptamana` on demand + the Sunday-night auto-report (daily averages vs targets, days on/over/under, weight trend, best/worst day).
+- **Phase 5 — Daily summary:** `/sumar` on demand + the 21:00 Europe/Bucharest auto-summary, posted to the chat the user last wrote in.
 - **Phase 4 — Activity, water, weight + corrections:** `/activitate` (text + photo caption), `/apa <ml>` (additive), `/cantar <kg>` (tracking only); `/azi` shows today's entries vs targets; `/sterge` removes the last entry of any type with a Da/Nu confirmation.
 - **Phase 3 — Meal logging:** `/masa` text + photo-caption → Gemini macro estimation (swappable provider, ordered model-fallback on free-tier 429), stored per-item with running daily totals vs targets.
 - **Phase 2 — Profile & targets:** `/profil` (guided onboarding) computes daily calorie + macro targets (Mifflin–St Jeor BMR → TDEE → goal adjustment); `/tinte` views and adjusts them.
