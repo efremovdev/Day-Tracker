@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING
 from .targets import Activity, Goal, Sex
 
 if TYPE_CHECKING:
+    from .estimator import MealEstimate
     from .models import Profile
+    from .repository import DayTotals
 
 START = (
     "👋 <b>Salut!</b> Sunt botul tău pentru urmărirea meselor și a activității zilnice.\n\n"
@@ -153,3 +155,74 @@ def format_targets_view(profile: Profile, computed_kcal: int | None = None) -> s
 def format_targets_updated(profile: Profile) -> str:
     """Confirmation shown after /tinte changes the kcal target."""
     return f"✅ <b>Calorii actualizate.</b>\n\n{format_targets_block(profile)}"
+
+
+# --- Masă / mese (P3) ----------------------------------------------------------
+
+MASA_EMPTY = (
+    "Scrie ce ai mâncat după comandă, de ex. "
+    "<code>/masa 100g piept de pui, 40g orez</code>.\n"
+    "Poți trimite comanda și ca descriere (caption) la o poză."
+)
+MASA_UNPARSEABLE = (
+    "Nu am recunoscut niciun aliment în text. 🤔\n"
+    "Încearcă să descrii mâncarea, de ex. "
+    "<code>/masa 2 ouă și o felie de pâine</code>."
+)
+MASA_LLM_ERROR = (
+    "Nu am putut estima macronutrienții acum (serviciul AI nu a răspuns). "
+    "Mai încearcă o dată peste câteva momente. 🙏"
+)
+
+
+def _macros_inline(protein_g: int, carbs_g: int, fat_g: int) -> str:
+    """Compact macro triple used on item and total lines."""
+    return f"{protein_g}P / {carbs_g}C / {fat_g}G"
+
+
+def _format_item_line(name: str, grams: float | None, kcal: int, macros: str) -> str:
+    head = f"{name} ({_fmt_num(grams)} g)" if grams is not None else name
+    return f"• {head}: <b>{kcal}</b> kcal · {macros}"
+
+
+def _format_day_progress(day: DayTotals, profile: Profile | None) -> str:
+    """Running daily totals, shown against targets when a profile exists."""
+    if profile is None:
+        return (
+            f"📊 <b>Azi:</b> {day.kcal} kcal · "
+            f"{_macros_inline(day.protein_g, day.carbs_g, day.fat_g)}\n"
+            "💡 Scrie /profil ca să-ți calculez ținte zilnice."
+        )
+    pct = round(day.kcal / profile.target_kcal * 100) if profile.target_kcal else 0
+    return (
+        f"📊 <b>Azi:</b> {day.kcal}/{profile.target_kcal} kcal ({pct}%)\n"
+        f"🥩 {day.protein_g}/{profile.target_protein_g} g · "
+        f"🍞 {day.carbs_g}/{profile.target_carbs_g} g · "
+        f"🥑 {day.fat_g}/{profile.target_fat_g} g"
+    )
+
+
+def format_meal_logged(estimate: MealEstimate, day: DayTotals, profile: Profile | None) -> str:
+    """Reply after a meal is logged: items, meal total, and the running daily total."""
+    lines = ["🍽️ <b>Masă înregistrată</b>"]
+    for item in estimate.items:
+        lines.append(
+            _format_item_line(
+                item.name,
+                item.grams,
+                item.kcal,
+                _macros_inline(item.protein_g, item.carbs_g, item.fat_g),
+            )
+        )
+    lines.append("")
+    lines.append(
+        f"<b>Total masă:</b> {estimate.kcal} kcal · "
+        f"{_macros_inline(estimate.protein_g, estimate.carbs_g, estimate.fat_g)}"
+    )
+    if estimate.approximate:
+        lines.append("⚠️ <i>Estimare aproximativă (porții presupuse).</i>")
+    if estimate.note:
+        lines.append(f"ℹ️ <i>{estimate.note}</i>")
+    lines.append("")
+    lines.append(_format_day_progress(day, profile))
+    return "\n".join(lines)

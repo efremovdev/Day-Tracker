@@ -109,3 +109,47 @@ stays **[IN PROGRESS]** until that passes → then mark **[DONE]** in a fresh ch
 - **P2 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
 - No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P3: Meal logging +
   AI macro estimation**.
+
+---
+
+## 2026-06-18 — P3 Meal logging + AI macro estimation (implementation)
+
+Claimed P3 (flipped to [IN PROGRESS]). Confirmed the two open params with the user first
+(see today's DECISIONS entry): vague input → **best-effort + flag**; and a **model
+switcher** — an ordered Gemini model list that falls through on free-tier 429.
+
+Built meal logging end-to-end:
+- `estimator.py` — `MacroEstimator` protocol + `MacroItem`/`MealEstimate` dataclasses;
+  pure `parse_estimate`/`loads_json_object` (recompute totals from items, tolerate ```json
+  fences); `GeminiMacroEstimator` (official `google-genai`, async, JSON mode, ordered
+  model fallback on `ClientError.code == 429`, lazy SDK import); deterministic
+  `FakeMacroEstimator` for offline dev/tests; `create_estimator` factory by `MACRO_PROVIDER`.
+- `models.py` — `Meal` (denormalized totals + `raw_text` + `approximate` + `note`,
+  local `log_date`) and child `MealItem` (ordered per-food macros). Additive `create_all`.
+- `repository.py` — `add_meal` + `get_day_totals` (SUM over user+date = running daily total)
+  and a `DayTotals` DTO.
+- `handlers/meals.py` — `/masa` as a text command **and** as a photo caption (dedicated
+  `F.photo & F.caption.regexp` handler, since aiogram's `Command` ignores captions);
+  estimate → store → reply with per-item breakdown, meal total, and daily total vs target.
+  Empty → ask to describe; no food → ask to rephrase; backend down → Romanian error.
+- `config.py` — `MACRO_PROVIDER` (gemini|fake, validated) + `GEMINI_MODELS` (ordered list).
+- `bot.py` — build the estimator + tz, inject both as contextual kwargs, register
+  `meals.router`. `.env.example` + README document the Gemini key / models / provider.
+- `pyproject.toml` — added `google-genai>=1.0` (installed 2.8.0 in `.venv`; API surface
+  verified: `client.aio.models.generate_content`, `GenerateContentConfig`, `errors.ClientError`).
+
+Verified: `ruff` + `black --check` pass; offline smoke test passes — `parse_estimate`
+(totals recomputed = 217 kcal, bad items dropped, whitespace note → None), fenced-JSON
+parse, `FakeMacroEstimator` item split, `GEMINI_MODELS` parsing/trim, provider validation,
+`create_estimator` (fake vs gemini-without-key → `ConfigError`), the full DB path (two
+meals → running total updates correctly, **P3 acceptance**), other-day isolation, the
+reply formatter (with/without profile), and dispatcher wiring (meals router registered).
+
+Choices within P3 scope (no new architectural decisions needed): totals always summed from
+items; whole-gram/kcal ints; one attempt per model (retry/backoff deferred to P7); meal
+stored immediately (corrections via `/sterge` in P4).
+
+**Pending (live acceptance):** user sets a real `GEMINI_API_KEY`, runs
+`/masa 40g orez, 100g piept de pui`, confirms plausible macros + storage, sends a second
+meal to confirm the running daily total updates, and tests a `/masa` **photo caption** in
+the privacy-OFF group. P3 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.

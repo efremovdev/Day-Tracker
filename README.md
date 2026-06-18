@@ -26,6 +26,22 @@ A single user (the owner's friend). She is the only tracked person; the bot live
 
 > The bot only ever responds to the configured `TRACKED_USER_ID`; messages from anyone else in the group are ignored.
 
+## Macro estimation (Gemini)
+
+Meals (`/masa ...`) are sent to an LLM that estimates calories and macros. The default
+provider is **Google Gemini Flash** on the free tier:
+
+1. Open [Google AI Studio](https://aistudio.google.com/apikey), create an API key, and put it in `GEMINI_API_KEY`.
+2. `GEMINI_MODELS` is an ordered, comma-separated list of models to try. When a model
+   hits its free-tier quota (HTTP 429), the bot automatically falls through to the next
+   one — each model has its own quota, so listing two buys more daily headroom. Default:
+   `gemini-2.5-flash,gemini-2.0-flash`.
+3. `MACRO_PROVIDER` selects the backend: `gemini` (default) or `fake` — a deterministic
+   offline stand-in that needs no API key, handy for local development without burning quota.
+
+> Estimates are best-effort, not lab-accurate. Specifying grams in the caption
+> (`100g piept de pui`) improves accuracy; vague meals are logged as approximate and flagged.
+
 ## Running locally
 
 Requires Python 3.12+.
@@ -58,6 +74,8 @@ black --check .
 
 ## Status
 
-**Phase 2 — Profile & personalized targets. IN PROGRESS.** `/profil` (guided onboarding) computes daily calorie + macro targets (Mifflin–St Jeor BMR → TDEE → goal adjustment); `/tinte` views and adjusts them. Pending a live run of `/profil` and `/tinte` in Telegram.
+**Phase 3 — Meal logging + AI macro estimation. IN PROGRESS.** `/masa <text>` (also as a photo caption) sends the description to Gemini, stores per-item macros, and replies with the breakdown, the meal total, and the running daily total vs target. Pending a live run in Telegram with a real `GEMINI_API_KEY`.
 
-Phase 1 (Skeleton) is **done**: config, async DB bootstrap, long-polling bot, `/start` + `/ajutor` in Romanian.
+Done so far:
+- **Phase 2 — Profile & targets:** `/profil` (guided onboarding) computes daily calorie + macro targets (Mifflin–St Jeor BMR → TDEE → goal adjustment); `/tinte` views and adjusts them.
+- **Phase 1 — Skeleton:** config, async DB bootstrap, long-polling bot, `/start` + `/ajutor` in Romanian.

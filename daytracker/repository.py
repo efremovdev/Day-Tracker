@@ -6,10 +6,18 @@ Keeps SQLAlchemy session handling out of the handlers. All target math stays in
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import date
+from typing import TYPE_CHECKING
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Profile
+from .models import Meal, MealItem, Profile
 from .targets import Targets
+
+if TYPE_CHECKING:
+    from .estimator import MealEstimate
 
 
 async def get_profile(session: AsyncSession, telegram_user_id: int) -> Profile | None:
@@ -70,3 +78,75 @@ async def update_targets(
 
     await session.commit()
     return profile
+
+
+# --- Meals (P3) ---------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DayTotals:
+    """Aggregated macro totals for one user on one local date."""
+
+    kcal: int
+    protein_g: int
+    carbs_g: int
+    fat_g: int
+    meals: int
+
+
+async def add_meal(
+    session: AsyncSession,
+    *,
+    telegram_user_id: int,
+    log_date: date,
+    raw_text: str,
+    estimate: MealEstimate,
+) -> Meal:
+    """Persist a meal and its per-item macros; returns the committed row."""
+    meal = Meal(
+        telegram_user_id=telegram_user_id,
+        log_date=log_date,
+        raw_text=raw_text,
+        total_kcal=estimate.kcal,
+        total_protein_g=estimate.protein_g,
+        total_carbs_g=estimate.carbs_g,
+        total_fat_g=estimate.fat_g,
+        approximate=estimate.approximate,
+        note=estimate.note,
+    )
+    for position, item in enumerate(estimate.items):
+        meal.items.append(
+            MealItem(
+                position=position,
+                name=item.name,
+                grams=item.grams,
+                kcal=item.kcal,
+                protein_g=item.protein_g,
+                carbs_g=item.carbs_g,
+                fat_g=item.fat_g,
+            )
+        )
+    session.add(meal)
+    await session.commit()
+    return meal
+
+
+async def get_day_totals(
+    session: AsyncSession, *, telegram_user_id: int, log_date: date
+) -> DayTotals:
+    """Sum all of the user's meal totals for ``log_date`` (the running daily total)."""
+    stmt = select(
+        func.coalesce(func.sum(Meal.total_kcal), 0),
+        func.coalesce(func.sum(Meal.total_protein_g), 0),
+        func.coalesce(func.sum(Meal.total_carbs_g), 0),
+        func.coalesce(func.sum(Meal.total_fat_g), 0),
+        func.count(Meal.id),
+    ).where(Meal.telegram_user_id == telegram_user_id, Meal.log_date == log_date)
+    kcal, protein, carbs, fat, meals = (await session.execute(stmt)).one()
+    return DayTotals(
+        kcal=int(kcal),
+        protein_g=int(protein),
+        carbs_g=int(carbs),
+        fat_g=int(fat),
+        meals=int(meals),
+    )

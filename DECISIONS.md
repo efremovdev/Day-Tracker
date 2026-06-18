@@ -93,3 +93,38 @@ pin the open parameters):
 - **Persistence:** a single `profiles` table keyed by Telegram user id
   (row-per-user keeps multi-user cheap later, per the v1 scope decision). FSM
   uses in-memory storage for now; restart safety is a P7 concern.
+
+## 2026-06-18 — P3 meal logging & macro estimation
+
+Confirmed with the user at the start of P3 (formulas/provider were already locked;
+these pin the open parameters):
+
+- **Vague/missing-portion input → best-effort + flag.** When a caption lacks grams
+  or is vague, the model assumes a typical portion, logs the meal, and marks it
+  `approximate` (shown with a ⚠️ note); she can `/sterge` if wrong. Chosen over
+  asking-to-clarify because it keeps logging fast and friction-free. Truly
+  unrecognizable text (no food) is *not* stored — the bot asks her to rephrase.
+- **Model switcher (free-tier resilience).** Instead of a single model, the Gemini
+  estimator takes an **ordered list** of models (`GEMINI_MODELS`, default
+  `gemini-2.5-flash,gemini-2.0-flash`) and falls through to the next when one returns
+  HTTP 429 (quota exhausted). Each model has its own free-tier quota bucket, so the
+  chain buys more daily headroom — the user asked for this explicitly. Robust
+  retry/backoff (timeouts, 5xx) stays a P7 concern; P3 does one attempt per model.
+- **Provider selection.** `MACRO_PROVIDER` env var picks the backend: `gemini`
+  (default) or `fake` (deterministic offline stand-in, no key — for local dev/tests).
+  All access stays behind the `MacroEstimator` protocol, so Claude/OpenAI can drop in
+  later with no call-site change (honors the 2026-06-17 LLM-interface decision).
+- **SDK:** the official `google-genai` client (async via `client.aio`), JSON mode
+  (`response_mime_type="application/json"`), imported lazily so non-Gemini paths and
+  tests don't require the package.
+- **Totals are recomputed from items**, never trusted from the model's own totals —
+  the parser sums per-item kcal/macros. Numbers are stored as whole grams/kcal (ints),
+  matching how targets are stored.
+- **Day attribution:** each meal is stamped with the **local calendar date** in the
+  configured timezone (`log_date`) at log time; the "running daily total" sums all
+  meals sharing that date. Aligns with the 21:00 Europe/Bucharest daily summary (P5).
+- **Schema:** `meals` (denormalized totals + `raw_text` + `approximate` + optional
+  `note`) with child `meal_items` (per-food macros, ordered). Denormalized totals keep
+  daily/weekly rollups cheap; `meal_items` preserves the per-item breakdown.
+- **No confirmation step:** per the plan, a meal is estimated and stored immediately,
+  then echoed back; corrections come via `/sterge` (P4).

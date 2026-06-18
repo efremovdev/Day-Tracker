@@ -26,3 +26,26 @@ Active bugs, gotchas, workarounds. Append with date.
   before P4) typed mid-form is treated as the current step's input and rejected with the
   step's validation message. Implemented commands (`/start`, `/ajutor`, `/profil`,
   `/tinte`, `/renunta`) work mid-form. Harmless; revisit if it becomes confusing.
+  - Note (P3): `/masa` typed mid-`/profil` is likewise swallowed by the active FSM step
+    (profile router is matched before meals). Same harmless behavior; revisit in P7.
+
+## 2026-06-18 — P3 notes
+
+- **Photo-caption commands — resolved in code, live-confirm pending.** aiogram 3's
+  `Command` filter only reads `message.text`, *not* `message.caption`, so a `/masa` photo
+  caption would never reach a plain `Command("masa")` handler. P3 adds a dedicated handler
+  matching `F.photo & F.caption.regexp(^/masa...)` and parses the args out of the caption.
+  Verified by unit/smoke logic; still needs a real photo-with-caption test in the
+  privacy-OFF group during live acceptance (the original KNOWN_ISSUES question).
+- **Model fallback scope.** The Gemini estimator only falls through to the next model on
+  HTTP **429** (quota). Other client errors (bad key, 400) fail fast with a Romanian
+  message; timeouts/5xx also try the next model but there is **no** retry/backoff yet —
+  that, plus per-model timeout tuning, is P7. If *all* models 429, she sees the generic
+  "service unavailable" message.
+- **`send_chat_action("typing")` is best-effort but not wrapped.** If that pre-call fails
+  (rare network blip), the `/masa` handler errors before logging. Acceptable for P3;
+  harden in P7 alongside the other error paths.
+- **Schema is additive.** An existing `daytracker.db` from P1/P2 gains `meals` /
+  `meal_items` via `create_all` on next start — no migration needed, no data loss.
+- **LLM estimates remain approximate** (see planning risks above). Per-item grams in the
+  caption improve accuracy; vague meals are flagged `approximate` in the reply.
