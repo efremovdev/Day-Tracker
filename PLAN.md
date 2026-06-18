@@ -88,7 +88,7 @@ Acceptance:
 
 ---
 
-## P6: Weekly report [IN PROGRESS]
+## P6: Weekly report [DONE 2026-06-18]
 
 Requirements:
 - `/saptamana` on-demand + scheduled Sunday-night report.

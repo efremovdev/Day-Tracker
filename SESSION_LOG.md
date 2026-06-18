@@ -344,3 +344,20 @@ P5's daily `_pick_summary_note` left untouched (no rewrite of working code).
 correct (averages, days on/over target, weight trend, best/worst day) over her real
 week; confirms the Sunday-night auto-report fires at 21:00 after the daily summary and
 matches `/saptamana`. P6 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.
+
+---
+
+## 2026-06-18 — P6 closed
+
+- User ran the live acceptance test: `/saptamana` returned the correct weekly report
+  (daily averages, days on/over target, weight trend, best/worst day), and the
+  Sunday-night auto-report fires at 21:00 after the daily summary and matches
+  `/saptamana`. ✅
+- Re-verified the static gate before closing: `ruff` + `black --check` pass; working
+  tree clean. (The P6 offline smoke test passed during implementation: week math,
+  populated report, empty/no-profile/old-weigh edge cases, mid-week window, and the
+  Sunday-vs-weekday scheduler gate with the weekly matching `/saptamana`.)
+- **P6 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
+- No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P7: Hardening**
+  (LLM failure/timeout/retry, input validation, restart safety, unit tests for target
+  math + macro-JSON parsing).
