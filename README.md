@@ -9,7 +9,7 @@ A Telegram bot that helps one person track daily nutrition and activity, in Roma
 - **LLM macro estimation** behind a swappable provider — default **Google Gemini Flash (free tier)**; upgradeable to Claude or OpenAI with no rewrite
 - **APScheduler** for the daily (21:00) and weekly (Sunday) reports
 - **Timezone:** Europe/Bucharest
-- **Hosting:** free cloud, running as a long-polling worker — Docker on an **Oracle Cloud Always Free VM** (see [Deployment](#deployment-247-on-a-free-cloud-vm))
+- **Hosting:** cloud, running as a long-polling worker — Docker on an **Azure B1s VM** (free for 12 months; see [Deployment](#deployment-247-on-a-free-cloud-vm))
 
 ## Who it's for
 
@@ -92,19 +92,20 @@ override `DATABASE_PATH` in `.env` for the container.
   after a crash or a VM reboot. If a 21:00 summary was missed while the VM was down, the
   startup catch-up delivers it once on the way back up.
 
-### Host: Oracle Cloud Always Free VM
+### Host: Azure VM (B1s)
 
-Oracle's *Always Free* tier is genuinely free forever (unlike Fly.io's allowance, which
-ended in 2024). The steps below are a generic "Ubuntu VM + Docker" flow — they work
-unchanged on a **Google Cloud `e2-micro` Always Free** instance (or any always-on VM) if
-Oracle's ARM capacity is unavailable in your region.
+Azure's free account includes a **B1s** Linux VM free for **12 months** (750 h/month =
+24/7), plus a ~$200 credit for the first 30 days; after 12 months a B1s runs ~$7–8/mo. The
+steps below are a generic "Ubuntu VM + Docker" flow, so they transfer unchanged to a
+truly-free-forever VM (Oracle Always Free or a Google Cloud `e2-micro`) if you want to move
+off Azure before the 12 months are up.
 
-1. **Create the instance.** In the [Oracle Cloud Console](https://cloud.oracle.com/) →
-   *Compute → Instances → Create instance*. Pick an **Always Free–eligible** shape
-   (`VM.Standard.A1.Flex` ARM if available, otherwise `VM.Standard.E2.1.Micro` x86) and
-   the **Ubuntu 22.04/24.04** image. Add your SSH public key. No ingress rules are needed
-   (long-polling is outbound-only) — leave the default security list.
-2. **SSH in:** `ssh ubuntu@<public-ip>`.
+1. **Create the VM.** In the [Azure Portal](https://portal.azure.com/) → *Virtual machines
+   → Create → Azure virtual machine*. Choose the **Ubuntu Server 22.04/24.04 LTS** image,
+   size **B1s** (1 vCPU / 1 GB — the free-tier-eligible size), and **SSH public key**
+   authentication (paste your key). For inbound ports allow **SSH (22) only** — long-polling
+   is outbound-only, so don't open HTTP/HTTPS.
+2. **SSH in:** `ssh azureuser@<public-ip>`.
 3. **Install Docker + the compose plugin** and enable it at boot:
    ```bash
    sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git
@@ -141,7 +142,7 @@ docker compose cp bot:/data/daytracker.db ./daytracker-backup.db
 
 ## Status
 
-**Phase 8 — Deployment. IN PROGRESS.** The bot is containerized (`Dockerfile`) and runs as a 24/7 long-polling worker via `docker compose`, with the SQLite database on a named volume so a redeploy keeps all data. Target host is an **Oracle Cloud Always Free VM** (the steps work on any Ubuntu VM, e.g. a Google Cloud `e2-micro`). See [Deployment](#deployment-247-on-a-free-cloud-vm). (Pending live acceptance: running it in the cloud and confirming a redeploy preserves data.)
+**Phase 8 — Deployment. IN PROGRESS.** The bot is containerized (`Dockerfile`) and runs as a 24/7 long-polling worker via `docker compose`, with the SQLite database on a named volume so a redeploy keeps all data. Target host is an **Azure B1s VM** (free for 12 months; the host-agnostic steps work on any Ubuntu VM, e.g. a truly-free Oracle or GCP `e2-micro`). See [Deployment](#deployment-247-on-a-free-cloud-vm). (Pending live acceptance: running it in the cloud and confirming a redeploy preserves data.)
 
 Done so far:
 - **Phase 7 — Hardening:** LLM retry/backoff with model fall-through, a generic-error handler, restart-safe (idempotent, catch-up) summaries, input length caps, and unit tests (target math + macro-JSON parsing).

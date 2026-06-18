@@ -318,3 +318,27 @@ so the choice was made on the "free 24/7" requirement:
   `.gitignore`d; compose reads it from the host at run time (`env_file: .env`). The
   image carries no token/key. `MACRO_PROVIDER=gemini` in production (the `fake`
   provider stays a local-dev/test aid).
+
+## 2026-06-18 — P8 host changed to Azure B1s (supersedes Oracle pick above)
+
+After reviewing the free-host landscape with the user, the host is changed from the
+Oracle Always Free VM to an **Azure B1s VM**. This supersedes only the *host* choice in
+the P8 entry above; everything else there stands unchanged (Docker + compose, non-root
+image, SQLite on a named volume, `restart: unless-stopped`, no inbound ports, secrets via
+a host `.env`).
+
+- **Why Azure, and why over AWS.** The user prefers the Azure ecosystem. Between the two
+  12-month free VMs considered (AWS `t3.micro`, Azure `B1s`), Azure was picked because its
+  B-series burst credits don't surprise-bill for sustained CPU (AWS `t3` "unlimited" mode
+  can), and its 12-month free VM offer is more clear-cut for a new account than AWS's 2025
+  credit-based free-tier revamp.
+- **Trade-off accepted, on the record.** Azure B1s is free for **12 months only**
+  (750 h/mo = 24/7) plus a ~$200 / 30-day credit; afterward a B1s is ~$7–8/mo — i.e. **not
+  free-forever**, and more than the Fly.io option rejected earlier. The user accepted this
+  knowingly, preferring Azure for now. Because the deploy guide is host-agnostic
+  (Ubuntu + Docker), moving later to a truly-free-forever VM (Oracle Always Free or a
+  Google Cloud `e2-micro`) is a **provisioning-only** change — no app, compose, or schema
+  changes.
+- **No code/config/schema impact.** Only the README provisioning steps and this rationale
+  change; the `Dockerfile`, `docker-compose.yml`, `.env` handling, and SQLite-on-named-
+  volume persistence are identical on Azure.

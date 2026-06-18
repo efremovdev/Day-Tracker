@@ -188,10 +188,11 @@ Still open / accepted:
   (`./data:/data`), the host dir keeps host ownership and they must `chown 10001:10001`
   it (or run rootful) — bind mounts don't copy image ownership. Named volume is the
   documented default for this reason.
-- **Oracle ARM capacity can be "out of stock."** `VM.Standard.A1.Flex` (Ampere ARM) is
-  often unavailable in popular regions. Fallbacks, both Always Free and unchanged in the
-  guide: the x86 `VM.Standard.E2.1.Micro`, or a Google Cloud `e2-micro` VM. The
-  Docker/compose flow is identical on any of them.
+- **Azure B1s free tier is 12 months only** (DECISIONS.md, 2026-06-18, host change). After
+  ~12 months a B1s is billed (~$7–8/mo) — it is **not** free-forever. Set a reminder before
+  the free period ends; migrating to a truly-free-forever VM (Oracle Always Free / GCP
+  `e2-micro`) is a provisioning-only change since the guide is host-agnostic. Keep the VM's
+  network security group to **SSH-only inbound** — long-polling needs no other open ports.
 - **OS/base-image patches need a rebuild.** Security updates to `python:3.12-slim` and
   the OS packages land via `docker compose up -d --build` (which re-pulls the base and
   re-installs deps), not automatically. A periodic redeploy keeps the image current.

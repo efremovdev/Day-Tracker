@@ -472,7 +472,20 @@ Choices within P8 scope (no new architectural decisions beyond the host): named 
 reboot, honors manual stop); containerized over bare systemd (pins runtime + one-line
 redeploy).
 
-**Pending (live acceptance):** user provisions the Always Free VM, installs Docker,
-clones the repo, fills `.env`, runs `docker compose up -d --build`, confirms the bot polls
-24/7, and confirms a redeploy (`git pull && docker compose up -d --build`) preserves the
-logged data. P8 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.
+**Pending (live acceptance):** user provisions the VM, installs Docker, clones the repo,
+fills `.env`, runs `docker compose up -d --build`, confirms the bot polls 24/7, and
+confirms a redeploy (`git pull && docker compose up -d --build`) preserves the logged
+data. P8 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.
+
+**Update (same day) — host changed Oracle → Azure B1s, and repo pushed.**
+- Pushed the code to a private GitHub repo, `efremovdev/Day-Tracker` (SSH remote, the
+  user's existing key authenticates as `efremovdev`). Installed `gh` via brew along the
+  way (not strictly needed once the repo existed). README clone step now uses the real
+  URL + a read-only deploy-key step for the private repo.
+- After walking the free-host landscape with the user (truly-free-forever VMs vs 12-month
+  tiers vs PaaS that sleep), the user chose **Azure B1s** over the Oracle pick. Recorded
+  as a superseding DECISIONS entry (host only; Docker/compose/persistence unchanged) with
+  the trade-off on the record: Azure B1s is free for **12 months only**, then ~$7–8/mo.
+  Updated the README Deployment host steps (Azure portal + B1s + SSH-only inbound),
+  Hosting line, Status block, and the KNOWN_ISSUES P8 note. No code/compose/schema change
+  — the guide is host-agnostic, so the switch is provisioning-only.
