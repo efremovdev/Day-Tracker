@@ -65,3 +65,35 @@ Choices made within P1 scope (no new architectural decisions needed):
 - **P1 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
 - No phase is [IN PROGRESS] now (between phases). **Next:** open a fresh chat to start
   **P2: Profile & personalized targets** — it will claim P2 and flip it to [IN PROGRESS].
+
+---
+
+## 2026-06-18 — P2 Profile & personalized targets (implementation)
+
+Claimed P2 (flipped to [IN PROGRESS]). Confirmed the open parameters with the user first
+(see today's DECISIONS entry): goal adjustment −15%/0/+10%, macros 2.0 g/kg protein + 25%
+fat + carbs remainder, `/tinte` adjusts total kcal.
+
+Built profile onboarding + targets:
+- `targets.py` — pure, I/O-free math: Mifflin–St Jeor BMR, TDEE × activity factor, goal
+  adjustment, macro split. Enums `Sex`/`Activity`/`Goal`; `compute_targets`, `macros_for`.
+- `models.py` — `Profile` ORM (inputs + computed targets + nullable `manual_kcal`), keyed by
+  Telegram id. Registered for `create_all` via a local import in `init_db`.
+- `repository.py` — async `get_profile` / `upsert_profile` / `update_targets` (all math stays
+  in `targets.py`; this layer only reads/writes rows).
+- `handlers/profile.py` — `/profil` FSM (sex → age → height → weight → activity → goal) with
+  reply-keyboard choices + validated numeric text (Romanian comma); `/renunta` cancels;
+  `/tinte` views targets and `/tinte <kcal>` overrides + recomputes macros.
+- `strings.py` — all new Romanian text, label maps, and formatters in one place.
+- `bot.py` — added FSM `MemoryStorage`, registered `profile.router`, and pass the
+  `sessionmaker` to handlers via `start_polling` kwargs (contextual injection).
+
+Verified: `ruff` + `black --check` pass; smoke test passes — target math vs hand calcs
+(female/lose 1805 kcal · 130p/209c/50f, male/gain 3378, maintain 2124, and a `/tinte 1600`
+override 130p/171c/44f); DB upsert + read across separate sessions; manual override sets
+`manual_kcal`; re-running `/profil` clears it; Romanian formatters incl. diacritics;
+dispatcher builds with the new router + storage.
+
+**Pending (live acceptance):** user runs `/profil` end-to-end in Telegram and `/tinte`
+(+ `/tinte 1600`) to confirm the conversation flow and that targets display correctly. P2
+stays **[IN PROGRESS]** until that passes → then mark **[DONE]** in a fresh chat.

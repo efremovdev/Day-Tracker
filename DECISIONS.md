@@ -68,3 +68,28 @@ Append-only log. Never delete entries; supersede with new dated entries if neede
   home logging. Pure-DB NL APIs are English, rate-limited and commercial — a worse fit.
 - The `MacroEstimator` interface keeps a DB/hybrid layer (LLM parses → DB verifies, plus
   barcode lookups) available as a cheap future add if exact branded accuracy is ever wanted.
+
+## 2026-06-18 — P2 profile & target parameters
+
+Chosen with the user at the start of P2 (the formulas were already locked; these
+pin the open parameters):
+
+- **Goal adjustment is percentage-based:** lose = TDEE −15%, maintain = TDEE,
+  gain = TDEE +10%. Picked over a flat ±500 kcal because a percentage scales with
+  body size — a flat 500 can be an oversized deficit for a smaller person.
+- **Activity factors** (standard Mifflin–St Jeor): sedentary 1.2, light 1.375,
+  moderate 1.55, active 1.725, very active 1.9.
+- **Macro defaults ("higher protein"):** protein **2.0 g/kg** body weight, fat
+  **25%** of kcal, carbs the remainder.
+- **`/tinte` adjusts the total kcal:** she sets a kcal number; protein stays
+  (g/kg × weight), fat = 25% of the new kcal, carbs = remainder. Stored as
+  `manual_kcal`; re-running `/profil` recomputes from inputs and clears it.
+- **Profile collects age in years** (not birth year) — simplest to ask; she
+  re-runs `/profil` to update.
+- **Onboarding UX:** aiogram FSM with **reply-keyboard** choices for
+  sex/activity/goal and validated text for age/height/weight. No inline
+  callbacks, so the existing message-only tracked-user gate stays sufficient.
+  Numeric input accepts a Romanian decimal comma (`64,5`).
+- **Persistence:** a single `profiles` table keyed by Telegram user id
+  (row-per-user keeps multi-user cheap later, per the v1 scope decision). FSM
+  uses in-memory storage for now; restart safety is a P7 concern.

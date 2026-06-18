@@ -16,3 +16,13 @@ Active bugs, gotchas, workarounds. Append with date.
   set OFF so it reliably receives messages/captions. Document in P1 setup.
 - **Photo-caption commands.** Confirm during P3 that a `/masa` command sent as a photo
   caption is delivered to the bot as expected in a privacy-off group.
+
+## 2026-06-18 — P2 notes
+
+- **FSM state is in-memory (`MemoryStorage`).** If the bot restarts mid-`/profil`, the
+  half-finished form is lost and she must run `/profil` again. Acceptable for now;
+  persistent FSM storage / restart safety is a P7 concern.
+- **Unknown slash-commands during `/profil`.** A command with no handler yet (e.g. `/azi`
+  before P4) typed mid-form is treated as the current step's input and rejected with the
+  step's validation message. Implemented commands (`/start`, `/ajutor`, `/profil`,
+  `/tinte`, `/renunta`) work mid-form. Harmless; revisit if it becomes confusing.

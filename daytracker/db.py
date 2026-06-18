@@ -1,9 +1,9 @@
 """Database layer (SQLite + SQLAlchemy 2.0, async via aiosqlite).
 
-For the P1 skeleton there are no domain tables yet — ``init_db`` just creates the
-database file and runs ``create_all`` so the schema-bootstrap is in place. Models
-are added per phase (profile & targets in P2, meals in P3, ...). Each new model
-subclasses :class:`Base` and is then picked up automatically by ``create_all``.
+``init_db`` creates the database file and runs ``create_all``. Models are added
+per phase (profile & targets in P2, meals in P3, ...) in :mod:`daytracker.models`;
+each subclasses :class:`Base` and is registered for ``create_all`` simply by being
+imported (``init_db`` imports the models module for exactly this reason).
 """
 
 from __future__ import annotations
@@ -49,6 +49,10 @@ def get_sessionmaker(settings: Settings) -> async_sessionmaker[AsyncSession]:
 
 async def init_db(settings: Settings) -> None:
     """Create the database file (and any registered tables) on startup."""
+    # Import models so their tables are registered on ``Base.metadata`` before
+    # ``create_all`` runs. Imported locally to avoid an import cycle (models → db).
+    from . import models  # noqa: F401
+
     settings.database_path.parent.mkdir(parents=True, exist_ok=True)
     engine = get_engine(settings)
     async with engine.begin() as conn:

@@ -27,7 +27,7 @@ Acceptance:
 
 ---
 
-## P2: Profile & personalized targets [TODO]
+## P2: Profile & personalized targets [IN PROGRESS]
 
 Onboarding to compute her daily calorie + macro targets.
 

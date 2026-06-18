@@ -58,4 +58,6 @@ black --check .
 
 ## Status
 
-**Phase 1 — Skeleton. IN PROGRESS.** Scaffold built: config, async DB bootstrap, long-polling bot, `/start` + `/ajutor` in Romanian. Pending a live run with a real token in the group.
+**Phase 2 — Profile & personalized targets. IN PROGRESS.** `/profil` (guided onboarding) computes daily calorie + macro targets (Mifflin–St Jeor BMR → TDEE → goal adjustment); `/tinte` views and adjusts them. Pending a live run of `/profil` and `/tinte` in Telegram.
+
+Phase 1 (Skeleton) is **done**: config, async DB bootstrap, long-polling bot, `/start` + `/ajutor` in Romanian.
