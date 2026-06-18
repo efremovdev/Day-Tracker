@@ -97,3 +97,15 @@ dispatcher builds with the new router + storage.
 **Pending (live acceptance):** user runs `/profil` end-to-end in Telegram and `/tinte`
 (+ `/tinte 1600`) to confirm the conversation flow and that targets display correctly. P2
 stays **[IN PROGRESS]** until that passes → then mark **[DONE]** in a fresh chat.
+
+---
+
+## 2026-06-18 — P2 closed
+
+- User ran the live acceptance test: completed `/profil` end-to-end in Telegram, targets
+  displayed correctly, and `/tinte` / `/tinte <kcal>` worked (view + override + recompute). ✅
+- Re-verified the static gate before closing: `ruff` + `black --check` pass and the P2 smoke
+  test passes; working tree clean.
+- **P2 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
+- No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P3: Meal logging +
+  AI macro estimation**.
