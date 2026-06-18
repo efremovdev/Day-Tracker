@@ -8,6 +8,9 @@ deterministic offline stand-in for local dev and tests.
 The Gemini implementation takes an *ordered list* of models and falls through to the
 next one when a model returns HTTP 429 (free-tier quota exhausted) — each model has
 its own quota bucket, so the chain buys more daily headroom (DECISIONS.md, 2026-06-18).
+Within a model, a *transient* failure (request timeout, 5xx, connection error) is
+retried up to :data:`RETRY_ATTEMPTS` times with a short exponential backoff before the
+chain moves on (P7 hardening — DECISIONS.md, 2026-06-18).
 
 JSON normalization (:func:`parse_estimate`) is a pure function: meal totals are always
 recomputed from the per-item numbers rather than trusting the model's own totals.
@@ -29,9 +32,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Single attempt per model + a request timeout is all P3 needs; robust retry/backoff
-# is explicitly P7 (see PLAN.md).
 REQUEST_TIMEOUT_SECONDS = 30.0
+# P7: retry a *transient* failure (timeout/5xx/connection) on the same model up to this
+# many attempts before moving to the next model; 429 (quota) never retries — it falls
+# straight through (DECISIONS.md, 2026-06-18).
+RETRY_ATTEMPTS = 2
+RETRY_BACKOFF_SECONDS = 1.0  # base delay before a retry; doubles each attempt
 
 SYSTEM_INSTRUCTION = (
     "You are a nutrition estimator for a Romanian food-logging bot. The user sends a "
@@ -215,33 +221,48 @@ class GeminiMacroEstimator:
 
         last_error: Exception | None = None
         for model in self._models:
-            try:
-                response = await asyncio.wait_for(
-                    self._client.aio.models.generate_content(
-                        model=model, contents=text, config=config
-                    ),
-                    timeout=self._timeout,
-                )
-            except errors.ClientError as exc:
-                # 429 = this model's free-tier quota is spent; try the next model.
-                if exc.code == 429:
-                    logger.warning("Gemini model %s rate-limited (429); trying next", model)
+            for attempt in range(RETRY_ATTEMPTS):
+                try:
+                    response = await asyncio.wait_for(
+                        self._client.aio.models.generate_content(
+                            model=model, contents=text, config=config
+                        ),
+                        timeout=self._timeout,
+                    )
+                except errors.ClientError as exc:
+                    # 429 = this model's free-tier quota is spent; a retry won't restore
+                    # it, so move straight to the next model.
+                    if exc.code == 429:
+                        logger.warning("Gemini model %s rate-limited (429); trying next", model)
+                        last_error = exc
+                        break
+                    # Other 4xx (bad key, bad request) won't be fixed by a retry or
+                    # another model — fail fast.
+                    logger.error("Gemini client error on %s: %s", model, exc)
+                    raise MacroEstimatorError(str(exc)) from exc
+                except (errors.ServerError, TimeoutError, ConnectionError) as exc:
+                    # Transient: retry the same model with backoff, then fall through.
                     last_error = exc
-                    continue
-                # Other 4xx (bad key, bad request) won't be fixed by another model.
-                logger.error("Gemini client error on %s: %s", model, exc)
-                raise MacroEstimatorError(str(exc)) from exc
-            except (errors.ServerError, TimeoutError, ConnectionError) as exc:
-                logger.warning("Gemini transient failure on %s (%s); trying next", model, exc)
-                last_error = exc
-                continue
+                    if attempt + 1 < RETRY_ATTEMPTS:
+                        delay = RETRY_BACKOFF_SECONDS * (2**attempt)
+                        logger.warning(
+                            "Gemini transient failure on %s (%s); retrying in %.0fs",
+                            model,
+                            exc,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    logger.warning("Gemini transient failure on %s (%s); trying next", model, exc)
+                    break
 
-            payload = loads_json_object(response.text or "")
-            if payload is None:
-                logger.warning("Gemini returned non-JSON on %s; trying next", model)
-                last_error = MacroEstimatorError("non-JSON response")
-                continue
-            return parse_estimate(payload)
+                payload = loads_json_object(response.text or "")
+                if payload is None:
+                    # A retry at temperature 0.2 would likely repeat it — move on.
+                    logger.warning("Gemini returned non-JSON on %s; trying next", model)
+                    last_error = MacroEstimatorError("non-JSON response")
+                    break
+                return parse_estimate(payload)
 
         raise MacroEstimatorError("all configured Gemini models failed") from last_error
 

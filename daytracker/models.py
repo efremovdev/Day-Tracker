@@ -175,3 +175,22 @@ class UserChat(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class SummaryDelivery(Base):
+    """Restart-safety marker (P7): the date each scheduled summary was last delivered.
+
+    APScheduler's jobstore is in-memory, so a run missed because the process was *down*
+    at 21:00 isn't replayed by the scheduler itself. This row lets the startup catch-up
+    send a summary missed that way, while keeping the send idempotent per day: the
+    scheduled job, an APScheduler misfire, and the catch-up all check this marker, so
+    they can never double-send (DECISIONS.md, 2026-06-18). One row per ``kind``.
+    """
+
+    __tablename__ = "summary_deliveries"
+
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)  # "daily" | "weekly"
+    last_sent_date: Mapped[date] = mapped_column(Date)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

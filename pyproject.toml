@@ -16,6 +16,7 @@ dependencies = [
 dev = [
     "ruff>=0.6",
     "black>=24.0",
+    "pytest>=8.0",
 ]
 
 [project.scripts]
@@ -38,3 +39,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

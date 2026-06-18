@@ -13,7 +13,16 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import ActivityLog, Meal, MealItem, Profile, UserChat, WaterLog, WeightLog
+from .models import (
+    ActivityLog,
+    Meal,
+    MealItem,
+    Profile,
+    SummaryDelivery,
+    UserChat,
+    WaterLog,
+    WeightLog,
+)
 from .targets import Targets
 
 if TYPE_CHECKING:
@@ -349,6 +358,27 @@ async def get_chat_id(session: AsyncSession, *, telegram_user_id: int) -> int | 
     """The chat the user last wrote in, or ``None`` if she hasn't messaged yet."""
     row = await session.get(UserChat, telegram_user_id)
     return row.chat_id if row is not None else None
+
+
+# --- Scheduled-summary delivery markers (P7 restart safety) --------------------
+
+
+async def get_summary_sent_date(session: AsyncSession, *, kind: str) -> date | None:
+    """The date the ``kind`` summary ("daily"/"weekly") was last delivered, or ``None``."""
+    row = await session.get(SummaryDelivery, kind)
+    return row.last_sent_date if row is not None else None
+
+
+async def mark_summary_sent(session: AsyncSession, *, kind: str, log_date: date) -> None:
+    """Record that the ``kind`` summary was delivered for ``log_date`` (idempotent)."""
+    row = await session.get(SummaryDelivery, kind)
+    if row is None:
+        session.add(SummaryDelivery(kind=kind, last_sent_date=log_date))
+    elif row.last_sent_date != log_date:
+        row.last_sent_date = log_date
+    else:
+        return  # unchanged — skip the write
+    await session.commit()
 
 
 @dataclass(frozen=True, slots=True)

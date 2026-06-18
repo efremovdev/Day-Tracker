@@ -125,3 +125,41 @@ Active bugs, gotchas, workarounds. Append with date.
 - **Same unescaped-`/masa`-reply note carries over.** Meal `raw_text` isn't shown in the
   weekly report (only aggregates/dates are), so there's no new escaping surface here;
   the older unescaped `/masa` item-name reply remains a P7 hardening item.
+
+## 2026-06-18 — P7 notes
+
+Resolved in P7 (no longer open):
+
+- **LLM retry/backoff** (P3 note) — the Gemini estimator now retries a *transient*
+  failure (timeout/5xx/connection) up to `RETRY_ATTEMPTS` (2) per model with short
+  exponential backoff before moving to the next model; 429 still falls straight through,
+  other 4xx still fail fast (DECISIONS.md, 2026-06-18).
+- **`send_chat_action("typing")` unwrapped** (P3 note) — now wrapped in `/masa`; a hiccup
+  is logged and logging proceeds.
+- **Unescaped `/masa` reply item names/note** (P4/P5/P6 note) — now HTML-escaped in
+  `format_meal_logged`. All user/LLM text shown back is escaped.
+- **Scheduler downtime not replayed** (P5/P6 note) — `run_startup_catchup` now sends a
+  summary missed because the process was down at 21:00, gated on the `summary_deliveries`
+  marker so it never double-sends or back-sends a stale prior day (see below).
+
+Still open / accepted:
+
+- **FSM state stays in-memory (`MemoryStorage`).** Per the P7 decision (DECISIONS.md,
+  2026-06-18), a restart mid-`/profil` or mid-`/sterge` loses the half-finished form and
+  she re-runs the command — accepted for one user. The *logged* data is in SQLite, so the
+  "data intact across a restart" acceptance holds regardless. Supersedes the P2 note that
+  flagged persistent FSM as a P7 item. (The separate router-ordering "command swallowed
+  mid-form" behavior from P2/P3/P4 is unchanged and out of P7 scope.)
+- **Catch-up never back-sends a fully elapsed day.** If the process is down through the
+  whole evening and starts the *next* day (after midnight, before 21:00), yesterday's
+  missed 21:00 summary is **not** sent — only today's, and only once 21:00 has passed.
+  By design (no stale prior-day summary). The daily SQLite data is intact either way.
+- **Single shared LLM request timeout.** All models share one `REQUEST_TIMEOUT_SECONDS`
+  (30s); per-model timeout tuning (mentioned in the P3 note) was not pursued — one value
+  is enough at this volume. Worst case on a full outage: ~2 attempts × N models × (timeout
+  + backoff) before the Romanian error, but `typing` is shown throughout.
+- **Generic error fallback.** Any unhandled exception in a handler (e.g. a DB error) is
+  caught by a dispatcher-level error handler that replies with one calm Romanian message
+  and logs the traceback; the meal path keeps its own specific messages.
+- **Schema is additive.** An existing `daytracker.db` gains `summary_deliveries` via
+  `create_all` on next start — no migration, no data loss.

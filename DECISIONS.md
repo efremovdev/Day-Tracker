@@ -240,3 +240,39 @@ already locked; these pin the open parameters):
   gathers a `WeekSummary` DTO (per-day stats + window weigh-ins + latest weight +
   profile) and `strings.format_weekly_report` renders it; both `/saptamana` and the
   scheduler call exactly these, so on-demand and scheduled reports are identical.
+
+## 2026-06-18 — P7 hardening
+
+Confirmed with the user at the start of P7 (the P7 scope — robust error handling,
+input validation, restart safety, unit tests — was already locked; these pin the
+open parameters):
+
+- **LLM transient failures → retry, then fall through.** The Gemini estimator now
+  makes up to **2 attempts per model** for *transient* failures (request timeout,
+  5xx, connection error) with a short exponential backoff (~1s before the retry),
+  then moves to the next model in the chain. **429 (quota) still falls straight
+  through to the next model** (a retry won't restore the bucket), and other 4xx
+  (bad key/request) still fail fast. Chosen over no-retry (loses a meal log on a
+  single transient blip) and over aggressive retry (a real outage would make her
+  wait 30s+ before the error). A non-JSON response still moves to the next model
+  (a retry at temperature 0.2 would repeat it).
+- **Missed 21:00 summary → catch up on startup, idempotently.** A new
+  `summary_deliveries` table records the date each scheduled summary (`daily` /
+  `weekly`) was last sent. The send functions self-guard: they skip if today's was
+  already sent, so the scheduled job, an APScheduler misfire, and the startup
+  catch-up can never double-send. On boot, if **21:00 has already passed today** and
+  today's summary wasn't sent, it's sent then (plus the weekly on Sundays). A day
+  that fully elapsed while the process was down is **never** back-sent (no stale
+  prior-day summary). Chosen over "skip missed runs" because the daily habit is the
+  point of the bot and this was the restart-safety gap repeatedly deferred to P7.
+- **FSM state stays in-memory (`MemoryStorage`).** A restart mid-`/profil` or
+  mid-`/sterge` loses the half-finished form and she re-runs the command — acceptable
+  for one user, and the *logged* data (the "data intact" acceptance) already lives in
+  SQLite. Chosen over persisting FSM (a custom/third-party storage layer to maintain
+  for a rare event). Documented in KNOWN_ISSUES.
+- **Errors surface as one generic Romanian message, never a silent failure.** A
+  dispatcher-level error handler catches any unhandled exception in a handler (e.g. a
+  DB error) and replies with a single calm Romanian "ceva n-a mers" message; the
+  meal-estimation path keeps its own specific error/clarify messages. Free-text inputs
+  (`/masa`, `/activitate`) are length-capped, and the older `/masa` reply now
+  HTML-escapes LLM item names/notes (the escaping gap carried forward since P4).

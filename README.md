@@ -49,7 +49,7 @@ Requires Python 3.12+.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"        # app + dev tools (ruff, black)
+pip install -e ".[dev]"        # app + dev tools (ruff, black, pytest)
 
 cp .env.example .env           # then edit .env with your real values
 python -m daytracker           # starts long-polling; Ctrl+C to stop
@@ -57,11 +57,12 @@ python -m daytracker           # starts long-polling; Ctrl+C to stop
 
 On first start the SQLite database file (`DATABASE_PATH`, default `daytracker.db`) is created automatically. Send `/start` or `/ajutor` in the group to check it responds.
 
-### Lint & format
+### Lint, format & test
 
 ```bash
 ruff check .
 black --check .
+pytest                 # unit tests (target math + macro-JSON parsing)
 ```
 
 ## Documentation

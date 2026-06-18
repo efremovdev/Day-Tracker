@@ -48,6 +48,10 @@ HELP = (
     "💡 Comenzile /masa și /activitate funcționează și ca descriere (caption) la o poză."
 )
 
+# Last-resort message when an unexpected error escapes a handler (P7). Calm and
+# non-technical — she can simply try again.
+GENERIC_ERROR = "Hopa, ceva n-a mers de partea mea. 😅 Mai încearcă o dată peste un moment."
+
 # --- Profil & ținte (P2) -------------------------------------------------------
 
 # Short labels for displaying a saved choice back to the user.
@@ -182,6 +186,10 @@ MASA_LLM_ERROR = (
     "Nu am putut estima macronutrienții acum (serviciul AI nu a răspuns). "
     "Mai încearcă o dată peste câteva momente. 🙏"
 )
+MASA_TOO_LONG = (
+    "Descrierea mesei e prea lungă. ✂️ Scrie mai pe scurt ce ai mâncat "
+    "(de ex. <code>/masa 100g piept de pui, 40g orez</code>)."
+)
 
 
 def _macros_inline(protein_g: int, carbs_g: int, fat_g: int) -> str:
@@ -190,7 +198,8 @@ def _macros_inline(protein_g: int, carbs_g: int, fat_g: int) -> str:
 
 
 def _format_item_line(name: str, grams: float | None, kcal: int, macros: str) -> str:
-    head = f"{name} ({_fmt_num(grams)} g)" if grams is not None else name
+    safe_name = _esc(name)  # item names come from the LLM — escape for Telegram HTML
+    head = f"{safe_name} ({_fmt_num(grams)} g)" if grams is not None else safe_name
     return f"• {head}: <b>{kcal}</b> kcal · {macros}"
 
 
@@ -231,7 +240,7 @@ def format_meal_logged(estimate: MealEstimate, day: DayTotals, profile: Profile 
     if estimate.approximate:
         lines.append("⚠️ <i>Estimare aproximativă (porții presupuse).</i>")
     if estimate.note:
-        lines.append(f"ℹ️ <i>{estimate.note}</i>")
+        lines.append(f"ℹ️ <i>{_esc(estimate.note)}</i>")
     lines.append("")
     lines.append(_format_day_progress(day, profile))
     return "\n".join(lines)
@@ -243,6 +252,10 @@ ACTIVITATE_EMPTY = (
     "Scrie ce activitate ai făcut după comandă, de ex. "
     "<code>/activitate 30 min alergare</code>.\n"
     "Poți trimite comanda și ca descriere (caption) la o poză."
+)
+ACTIVITATE_TOO_LONG = (
+    "Descrierea activității e prea lungă. ✂️ Scrie mai pe scurt "
+    "(de ex. <code>/activitate 30 min alergare</code>)."
 )
 ERR_APA = (
     "Scrie câți ml de apă ai băut, de ex. <code>/apa 500</code> " "(număr întreg între 1 și 5000)."

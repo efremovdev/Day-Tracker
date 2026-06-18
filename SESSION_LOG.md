@@ -361,3 +361,57 @@ matches `/saptamana`. P6 stays **[IN PROGRESS]** until that passes → then mark
 - No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P7: Hardening**
   (LLM failure/timeout/retry, input validation, restart safety, unit tests for target
   math + macro-JSON parsing).
+
+---
+
+## 2026-06-18 — P7 Hardening (implementation)
+
+Claimed P7 (flipped to [IN PROGRESS]). Confirmed the three open params with the user
+first (see today's DECISIONS entry): LLM transient failures → **retry then fall
+through**; missed 21:00 summary → **catch up on startup, idempotently**; FSM state →
+**stays in-memory** (accepted, documented).
+
+Built the hardening:
+- `estimator.py` — per-model **retry with exponential backoff** for transient failures
+  (timeout/5xx/connection): up to `RETRY_ATTEMPTS` (2) attempts per model, `~1s` backoff,
+  then fall through. 429 still moves straight to the next model (no retry); other 4xx
+  still fail fast; a non-JSON response still falls through.
+- `models.py` — `SummaryDelivery` table (`kind` → `last_sent_date`), the per-day
+  delivery marker. Additive `create_all`.
+- `repository.py` — `get_summary_sent_date` / `mark_summary_sent` (idempotent upsert).
+- `scheduler.py` — `send_daily_summary` / `send_weekly_report` are now **idempotent per
+  day** (skip if already sent; mark on success), so the scheduled job, an APScheduler
+  misfire, and the catch-up can't double-send. Added `run_startup_catchup`: on boot, if
+  21:00 already passed today and today's summary wasn't sent, send it (plus the weekly on
+  Sundays). Never back-sends a fully elapsed prior day.
+- `bot.py` — registered a dispatcher-level `on_error` handler (any unhandled exception →
+  one calm Romanian `GENERIC_ERROR` reply + logged traceback); call `run_startup_catchup`
+  after the scheduler starts, before polling.
+- `handlers/meals.py` — wrapped the best-effort `send_chat_action("typing")`; added a
+  `MAX_MEAL_TEXT` (1000) length cap. `handlers/tracking.py` — `MAX_ACTIVITY_TEXT` cap.
+- `strings.py` — `GENERIC_ERROR`, `MASA_TOO_LONG`, `ACTIVITATE_TOO_LONG`; HTML-escape the
+  LLM item names + note in the `/masa` reply (the escaping gap carried since P4).
+- `pyproject.toml` — added `pytest>=8.0` (dev) + `[tool.pytest.ini_options]` (testpaths).
+- `tests/` — `test_targets.py` (12 tests: BMR/TDEE/goal_kcal/macros_for/compute_targets
+  vs hand-computed values, carb clamp, factor-table coverage, lose<maintain<gain) and
+  `test_estimator.py` (parsing: fenced/plain JSON, non-object → None, `_to_int`/`_to_grams`
+  coercions, totals recomputed from items, junk items dropped, negatives clamped, note
+  trimmed). **56 tests pass.**
+
+Verified: `ruff` + `black --check` pass; **56 unit tests pass**; package imports clean;
+dispatcher builds with the error handler registered. Offline smoke test passes — estimator
+**retry-then-success** (m1,m1), **429 fall-through** (m1,m2 — no same-model retry),
+**400 fail-fast** (m1 only), **all-transient exhausts the chain** (m1,m1,m2,m2 → error);
+restart safety: **idempotent daily send** (1 send across 2 calls), **catch-up gated on
+21:00** (no send at 14:00, one send at 22:00, idempotent on re-run), **Sunday catch-up →
+daily + weekly**.
+
+Choices within P7 scope (no new architectural decisions needed): single shared LLM
+timeout (no per-model tuning); catch-up reuses `send_evening_summaries` (the Sunday gate
+lives there); tests cover only the plan's two pure areas (target math + macro-JSON), no
+async/DB test harness added.
+
+**Pending (live acceptance):** user confirms the bot survives bad input (a malformed
+`/masa`/`/apa`/`/cantar` gets a friendly message, no crash) and a **restart with data
+intact** (logs persist; if restarted after a missed 21:00, the catch-up sends today's
+summary once). P7 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.

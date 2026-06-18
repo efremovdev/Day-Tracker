@@ -9,16 +9,34 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import ErrorEvent
 
+from . import strings
 from .config import Settings, load_settings
 from .db import dispose_engine, get_sessionmaker, init_db
 from .estimator import create_estimator
 from .handlers import common, corrections, meals, profile, summary, tracking
 from .logging_setup import configure_logging
 from .middlewares import ChatRecorderMiddleware, TrackedUserMiddleware
-from .scheduler import create_scheduler
+from .scheduler import create_scheduler, run_startup_catchup
 
 logger = logging.getLogger(__name__)
+
+
+async def on_error(event: ErrorEvent) -> None:
+    """Last-resort handler: log any unhandled error and reply with a calm Romanian note.
+
+    Catches exceptions a handler didn't handle itself (e.g. a DB error) so the user
+    always gets feedback instead of silence. The meal-estimation path keeps its own
+    specific messages and never reaches here.
+    """
+    logger.error("Unhandled error while processing an update", exc_info=event.exception)
+    message = event.update.message if event.update is not None else None
+    if message is not None:
+        try:
+            await message.answer(strings.GENERIC_ERROR)
+        except Exception:  # don't let the error handler itself raise
+            logger.warning("Failed to notify the user about the error", exc_info=True)
 
 
 def create_dispatcher(settings: Settings) -> Dispatcher:
@@ -35,6 +53,7 @@ def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(tracking.router)
     dp.include_router(summary.router)
     dp.include_router(corrections.router)
+    dp.errors.register(on_error)
     return dp
 
 
@@ -70,6 +89,13 @@ async def run_bot() -> None:
         logger.info(
             "Scheduler started (daily summary 21:00 %s; weekly report Sunday 21:00).",
             settings.timezone,
+        )
+        # Restart safety: send a summary missed while the process was down at 21:00.
+        await run_startup_catchup(
+            bot=bot,
+            sessionmaker=sessionmaker,
+            tz=tz,
+            tracked_user_id=settings.tracked_user_id,
         )
         # These are propagated to handlers as contextual kwargs (by name).
         await dp.start_polling(bot, sessionmaker=sessionmaker, estimator=estimator, tz=tz)

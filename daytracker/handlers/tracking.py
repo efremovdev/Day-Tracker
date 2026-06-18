@@ -28,6 +28,8 @@ router = Router(name="tracking")
 # Input bounds, kept next to the matching error strings.
 WATER_MIN_ML, WATER_MAX_ML = 1, 5000
 WEIGHT_MIN, WEIGHT_MAX = 30.0, 300.0
+# Cap the free-text activity description (P7 input validation); generous for normal use.
+MAX_ACTIVITY_TEXT = 1000
 
 # Matches an "/activitate" caption (optionally "/activitate@BotName") and captures the rest.
 _ACT_CAPTION_RE = re.compile(
@@ -87,6 +89,9 @@ async def _log_activity(
     text = (activity_text or "").strip()
     if not text:
         await message.answer(strings.ACTIVITATE_EMPTY)
+        return
+    if len(text) > MAX_ACTIVITY_TEXT:
+        await message.answer(strings.ACTIVITATE_TOO_LONG)
         return
     today = datetime.now(tz).date()
     async with sessionmaker() as session:

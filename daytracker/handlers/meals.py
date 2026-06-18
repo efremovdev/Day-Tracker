@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 router = Router(name="meals")
 
+# Cap the free-text meal description so an accidental wall of text can't be stored or
+# shipped to the LLM (P7 input validation). Generous — normal meals are far shorter.
+MAX_MEAL_TEXT = 1000
+
 # Matches a "/masa" caption (optionally "/masa@BotName") and captures the rest.
 _MASA_CAPTION_RE = re.compile(r"^/masa(?:@\w+)?(?:\s+(?P<args>.*))?$", re.IGNORECASE | re.DOTALL)
 
@@ -67,9 +71,16 @@ async def _log_meal(
     if not text:
         await message.answer(strings.MASA_EMPTY)
         return
+    if len(text) > MAX_MEAL_TEXT:
+        await message.answer(strings.MASA_TOO_LONG)
+        return
 
     # Estimating calls the LLM and can take a couple of seconds — show "typing".
-    await message.bot.send_chat_action(message.chat.id, "typing")
+    # Best-effort: a hiccup here must not abort logging the meal (P7).
+    try:
+        await message.bot.send_chat_action(message.chat.id, "typing")
+    except Exception:
+        logger.warning("send_chat_action failed; continuing", exc_info=True)
 
     try:
         estimate = await estimator.estimate(text)
