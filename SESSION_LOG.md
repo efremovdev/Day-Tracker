@@ -415,3 +415,19 @@ async/DB test harness added.
 `/masa`/`/apa`/`/cantar` gets a friendly message, no crash) and a **restart with data
 intact** (logs persist; if restarted after a missed 21:00, the catch-up sends today's
 summary once). P7 stays **[IN PROGRESS]** until that passes → then mark **[DONE]**.
+
+---
+
+## 2026-06-18 — P7 closed
+
+- User ran the live acceptance test: the bot survives bad input (malformed
+  `/masa`/`/apa`/`/cantar` get a friendly message, no crash) and a restart with data
+  intact (logs persist; the catch-up sends a missed 21:00 summary once on boot). ✅
+- Re-verified the static gate before closing: `ruff` + `black --check` pass and the
+  **56 unit tests pass**; working tree clean. (The P7 offline smoke test passed during
+  implementation: estimator retry/fall-through/fail-fast/chain-exhaust, and restart
+  safety — idempotent sends, catch-up gated on 21:00, Sunday daily+weekly.)
+- **P7 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
+- No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P8: Deployment**
+  (Dockerfile + run-as-worker, free 24/7 host, secrets/env, deploy guide) — runs 24/7
+  in the cloud and survives a redeploy without losing data.

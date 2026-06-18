@@ -99,7 +99,7 @@ Acceptance:
 
 ---
 
-## P7: Hardening [IN PROGRESS]
+## P7: Hardening [DONE 2026-06-18]
 
 Requirements:
 - Robust error handling (LLM failure/timeout/retry, malformed input, DB errors).
