@@ -53,3 +53,15 @@ Choices made within P1 scope (no new architectural decisions needed):
 **Pending (live acceptance):** run with a real BotFather token in the group and confirm
 `/start` + `/ajutor` reply and Ctrl+C exits cleanly. P1 stays **[IN PROGRESS]** until that passes.
 **Next:** user does the live-token test → mark P1 [DONE] → open a fresh chat for P2.
+
+---
+
+## 2026-06-18 — P1 closed
+
+- User ran the live-token acceptance test: bot started with the real BotFather token,
+  replied to `/start` and `/ajutor` in the group, and exited cleanly on Ctrl+C. ✅
+- Re-verified the static gate before closing: `ruff check` and `black --check` both pass
+  in `.venv`; working tree clean.
+- **P1 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
+- No phase is [IN PROGRESS] now (between phases). **Next:** open a fresh chat to start
+  **P2: Profile & personalized targets** — it will claim P2 and flip it to [IN PROGRESS].

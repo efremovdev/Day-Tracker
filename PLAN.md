@@ -5,7 +5,7 @@ Only ONE phase is [IN PROGRESS] at a time.
 
 ---
 
-## P1: Skeleton [IN PROGRESS]
+## P1: Skeleton [DONE 2026-06-18]
 
 Minimal working bot that connects to Telegram and responds in the group.
 
