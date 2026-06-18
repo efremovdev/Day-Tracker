@@ -75,7 +75,7 @@ Acceptance:
 
 ---
 
-## P5: Daily summary [IN PROGRESS]
+## P5: Daily summary [DONE 2026-06-18]
 
 Requirements:
 - `/sumar` on-demand summary.

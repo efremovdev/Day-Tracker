@@ -277,3 +277,19 @@ scheduler in-process (no persistence — P7); destination skip when no chat is k
 confirms the 21:00 auto-summary fires and matches `/sumar`; confirms it lands in the
 expected chat (the one she last wrote in). P5 stays **[IN PROGRESS]** until that passes →
 then mark **[DONE]**.
+
+---
+
+## 2026-06-18 — P5 closed
+
+- User ran the live acceptance test: `/sumar` returned the correct daily summary, the
+  21:00 Europe/Bucharest auto-summary fired, matched `/sumar`, and landed in the chat
+  she last wrote in. ✅
+- Re-verified the static gate before closing: `ruff` + `black --check` pass; working
+  tree clean. (The P5 offline smoke test passed during implementation: chat memory,
+  across-days vs today-only weight, empty-day nudge, populated summary + deterministic
+  note, scheduled job → remembered chat matching `/sumar`, skip-when-no-chat, scheduler
+  configured at 21:00 Europe/Bucharest, dispatcher + middleware wiring.)
+- **P5 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
+- No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P6: Weekly
+  report** (`/saptamana` on demand + the Sunday-night report).
