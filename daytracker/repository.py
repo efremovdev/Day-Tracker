@@ -7,13 +7,13 @@ Keeps SQLAlchemy session handling out of the handlers. All target math stays in
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Meal, MealItem, Profile
+from .models import ActivityLog, Meal, MealItem, Profile, WaterLog, WeightLog
 from .targets import Targets
 
 if TYPE_CHECKING:
@@ -150,3 +150,170 @@ async def get_day_totals(
         fat_g=int(fat),
         meals=int(meals),
     )
+
+
+async def get_day_meals(
+    session: AsyncSession, *, telegram_user_id: int, log_date: date
+) -> list[Meal]:
+    """Today's meals in log order (for the ``/azi`` view)."""
+    stmt = (
+        select(Meal)
+        .where(Meal.telegram_user_id == telegram_user_id, Meal.log_date == log_date)
+        .order_by(Meal.created_at, Meal.id)
+    )
+    return list((await session.scalars(stmt)).all())
+
+
+# --- Activity / water / weight (P4) -------------------------------------------
+
+
+async def add_activity(
+    session: AsyncSession, *, telegram_user_id: int, log_date: date, text: str
+) -> ActivityLog:
+    """Store a free-text activity (logged only — no calorie add-back)."""
+    row = ActivityLog(telegram_user_id=telegram_user_id, log_date=log_date, raw_text=text)
+    session.add(row)
+    await session.commit()
+    return row
+
+
+async def add_water(
+    session: AsyncSession, *, telegram_user_id: int, log_date: date, ml: int
+) -> WaterLog:
+    """Store a water entry (additive — the day's water is the sum of its rows)."""
+    row = WaterLog(telegram_user_id=telegram_user_id, log_date=log_date, ml=ml)
+    session.add(row)
+    await session.commit()
+    return row
+
+
+async def add_weight(
+    session: AsyncSession, *, telegram_user_id: int, log_date: date, weight_kg: float
+) -> WeightLog:
+    """Store a weigh-in. Does not touch the profile or recompute targets."""
+    row = WeightLog(telegram_user_id=telegram_user_id, log_date=log_date, weight_kg=weight_kg)
+    session.add(row)
+    await session.commit()
+    return row
+
+
+async def get_day_activities(
+    session: AsyncSession, *, telegram_user_id: int, log_date: date
+) -> list[ActivityLog]:
+    """Today's activities in log order."""
+    stmt = (
+        select(ActivityLog)
+        .where(ActivityLog.telegram_user_id == telegram_user_id, ActivityLog.log_date == log_date)
+        .order_by(ActivityLog.created_at, ActivityLog.id)
+    )
+    return list((await session.scalars(stmt)).all())
+
+
+async def get_day_water_ml(session: AsyncSession, *, telegram_user_id: int, log_date: date) -> int:
+    """Total millilitres of water logged today."""
+    stmt = select(func.coalesce(func.sum(WaterLog.ml), 0)).where(
+        WaterLog.telegram_user_id == telegram_user_id, WaterLog.log_date == log_date
+    )
+    return int((await session.scalar(stmt)) or 0)
+
+
+async def get_latest_weight_today(
+    session: AsyncSession, *, telegram_user_id: int, log_date: date
+) -> WeightLog | None:
+    """The most recent weigh-in logged *today*, or ``None`` if she didn't weigh in."""
+    stmt = (
+        select(WeightLog)
+        .where(WeightLog.telegram_user_id == telegram_user_id, WeightLog.log_date == log_date)
+        .order_by(WeightLog.created_at.desc(), WeightLog.id.desc())
+        .limit(1)
+    )
+    return await session.scalar(stmt)
+
+
+# --- Corrections: last entry + delete (P4) ------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class LastEntry:
+    """The most recent entry across all types — what ``/sterge`` offers to delete.
+
+    Carries enough data for the confirmation message; the repository returns the
+    raw values and :mod:`daytracker.strings` formats the Romanian description.
+    """
+
+    kind: str  # "masa" | "activitate" | "apa" | "cantar"
+    id: int
+    created_at: datetime
+    text: str | None = None
+    kcal: int | None = None
+    ml: int | None = None
+    weight_kg: float | None = None
+
+
+async def get_last_entry(session: AsyncSession, *, telegram_user_id: int) -> LastEntry | None:
+    """Return the single most recent entry of any kind, or ``None`` if there are none.
+
+    Queries the latest row of each table and picks the overall newest by
+    ``created_at`` (ties resolve to meal → activity → water → weight).
+    """
+    candidates: list[LastEntry] = []
+
+    meal = await session.scalar(
+        select(Meal)
+        .where(Meal.telegram_user_id == telegram_user_id)
+        .order_by(Meal.created_at.desc(), Meal.id.desc())
+        .limit(1)
+    )
+    if meal is not None:
+        candidates.append(
+            LastEntry("masa", meal.id, meal.created_at, text=meal.raw_text, kcal=meal.total_kcal)
+        )
+
+    activity = await session.scalar(
+        select(ActivityLog)
+        .where(ActivityLog.telegram_user_id == telegram_user_id)
+        .order_by(ActivityLog.created_at.desc(), ActivityLog.id.desc())
+        .limit(1)
+    )
+    if activity is not None:
+        candidates.append(
+            LastEntry("activitate", activity.id, activity.created_at, text=activity.raw_text)
+        )
+
+    water = await session.scalar(
+        select(WaterLog)
+        .where(WaterLog.telegram_user_id == telegram_user_id)
+        .order_by(WaterLog.created_at.desc(), WaterLog.id.desc())
+        .limit(1)
+    )
+    if water is not None:
+        candidates.append(LastEntry("apa", water.id, water.created_at, ml=water.ml))
+
+    weight = await session.scalar(
+        select(WeightLog)
+        .where(WeightLog.telegram_user_id == telegram_user_id)
+        .order_by(WeightLog.created_at.desc(), WeightLog.id.desc())
+        .limit(1)
+    )
+    if weight is not None:
+        candidates.append(
+            LastEntry("cantar", weight.id, weight.created_at, weight_kg=weight.weight_kg)
+        )
+
+    if not candidates:
+        return None
+    return max(candidates, key=lambda entry: entry.created_at)
+
+
+async def delete_entry(session: AsyncSession, *, kind: str, entry_id: int) -> None:
+    """Delete one entry by kind + id. A meal also removes its child items."""
+    if kind == "masa":
+        await session.execute(delete(MealItem).where(MealItem.meal_id == entry_id))
+        await session.execute(delete(Meal).where(Meal.id == entry_id))
+    elif kind == "activitate":
+        await session.execute(delete(ActivityLog).where(ActivityLog.id == entry_id))
+    elif kind == "apa":
+        await session.execute(delete(WaterLog).where(WaterLog.id == entry_id))
+    elif kind == "cantar":
+        await session.execute(delete(WeightLog).where(WeightLog.id == entry_id))
+    await session.commit()

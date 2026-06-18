@@ -6,14 +6,22 @@ Messages use Telegram HTML formatting (the bot's default parse mode).
 
 from __future__ import annotations
 
+import html
+from datetime import date
 from typing import TYPE_CHECKING
 
 from .targets import Activity, Goal, Sex
 
 if TYPE_CHECKING:
     from .estimator import MealEstimate
-    from .models import Profile
-    from .repository import DayTotals
+    from .models import ActivityLog, Meal, Profile, WeightLog
+    from .repository import DayTotals, LastEntry
+
+
+def _esc(text: str) -> str:
+    """Escape user-supplied text for Telegram HTML (the bot's parse mode)."""
+    return html.escape(text or "", quote=False)
+
 
 START = (
     "👋 <b>Salut!</b> Sunt botul tău pentru urmărirea meselor și a activității zilnice.\n\n"
@@ -225,4 +233,98 @@ def format_meal_logged(estimate: MealEstimate, day: DayTotals, profile: Profile 
         lines.append(f"ℹ️ <i>{estimate.note}</i>")
     lines.append("")
     lines.append(_format_day_progress(day, profile))
+    return "\n".join(lines)
+
+
+# --- Activitate / apă / cântar / azi / șterge (P4) -----------------------------
+
+ACTIVITATE_EMPTY = (
+    "Scrie ce activitate ai făcut după comandă, de ex. "
+    "<code>/activitate 30 min alergare</code>.\n"
+    "Poți trimite comanda și ca descriere (caption) la o poză."
+)
+ERR_APA = (
+    "Scrie câți ml de apă ai băut, de ex. <code>/apa 500</code> " "(număr întreg între 1 și 5000)."
+)
+ERR_CANTAR = "Scrie greutatea în kg, de ex. <code>/cantar 64,5</code> " "(număr între 30 și 300)."
+
+STERGE_NOTHING = "Nu am găsit nicio înregistrare de șters. 🤔"
+STERGE_CANCELLED = "Am anulat. Nu am șters nimic."
+
+# Reply-keyboard captions for the /sterge confirmation (no inline callbacks).
+STERGE_YES = "✅ Da, șterge"
+STERGE_NO = "❌ Nu, păstrează"
+
+
+def format_activity_logged(text: str) -> str:
+    return f"🏃 <b>Activitate înregistrată.</b>\n{_esc(text)}"
+
+
+def format_water_logged(added_ml: int, total_ml: int) -> str:
+    return f"💧 <b>Apă înregistrată:</b> +{added_ml} ml\n" f"Total azi: <b>{total_ml}</b> ml"
+
+
+def format_weight_logged(weight_kg: float) -> str:
+    return f"⚖️ <b>Greutate înregistrată:</b> {_fmt_num(weight_kg)} kg"
+
+
+def format_today(
+    log_date: date,
+    meals: list[Meal],
+    day: DayTotals,
+    activities: list[ActivityLog],
+    water_ml: int,
+    weight: WeightLog | None,
+    profile: Profile | None,
+) -> str:
+    """The /azi view: today's meals + totals vs targets, activity, water, weight."""
+    lines = [f"📅 <b>Azi</b> ({log_date.strftime('%d.%m.%Y')})", ""]
+
+    lines.append("🍽️ <b>Mese</b>")
+    if meals:
+        for meal in meals:
+            lines.append(f"• {_esc(meal.raw_text)} — <b>{meal.total_kcal}</b> kcal")
+    else:
+        lines.append("<i>nimic încă</i>")
+    lines.append("")
+    lines.append(_format_day_progress(day, profile))
+    lines.append("")
+
+    lines.append("🏃 <b>Activitate</b>")
+    if activities:
+        for activity in activities:
+            lines.append(f"• {_esc(activity.raw_text)}")
+    else:
+        lines.append("<i>nimic</i>")
+    lines.append("")
+
+    lines.append(f"💧 <b>Apă:</b> {water_ml} ml")
+    weight_text = f"{_fmt_num(weight.weight_kg)} kg" if weight is not None else "—"
+    lines.append(f"⚖️ <b>Greutate:</b> {weight_text}")
+    return "\n".join(lines)
+
+
+def _entry_description(entry: LastEntry) -> str:
+    """Short Romanian description of the entry /sterge would remove."""
+    if entry.kind == "masa":
+        return f"🍽️ masă: {_esc(entry.text or '')} (<b>{entry.kcal}</b> kcal)"
+    if entry.kind == "activitate":
+        return f"🏃 activitate: {_esc(entry.text or '')}"
+    if entry.kind == "apa":
+        return f"💧 apă: <b>{entry.ml}</b> ml"
+    if entry.kind == "cantar":
+        return f"⚖️ greutate: <b>{_fmt_num(entry.weight_kg or 0)}</b> kg"
+    return entry.kind
+
+
+def format_delete_confirm(entry: LastEntry) -> str:
+    return f"🗑️ <b>Ștergi ultima înregistrare?</b>\n\n{_entry_description(entry)}"
+
+
+def format_delete_done(kind: str, day: DayTotals, profile: Profile | None) -> str:
+    """Confirmation after a delete; for a meal, also shows the updated daily total."""
+    lines = ["🗑️ <b>Înregistrare ștearsă.</b>"]
+    if kind == "masa":
+        lines.append("")
+        lines.append(_format_day_progress(day, profile))
     return "\n".join(lines)

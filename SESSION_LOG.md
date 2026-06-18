@@ -166,3 +166,49 @@ the privacy-OFF group. P3 stays **[IN PROGRESS]** until that passes → then mar
 - **P3 marked [DONE 2026-06-18]** in PLAN.md. All acceptance criteria met.
 - No phase is [IN PROGRESS] now. **Next:** open a fresh chat to start **P4: Activity,
   water, weight + corrections** (`/activitate`, `/apa`, `/cantar`, `/azi`, `/sterge`).
+
+---
+
+## 2026-06-18 — P4 Activity, water, weight + corrections (implementation)
+
+Claimed P4 (flipped to [IN PROGRESS]). Confirmed the two open params with the user first
+(see today's DECISIONS entry): `/sterge` removes the **last entry of any type** (shown in
+a confirmation), and `/cantar` is a **tracking log only** (never recomputes targets).
+
+Built the logging, daily view, and corrections:
+- `models.py` — `ActivityLog`, `WaterLog`, `WeightLog` (each keyed by Telegram id +
+  `log_date`, with `created_at`). Named `ActivityLog` to avoid clashing with
+  `targets.Activity`. Additive `create_all`.
+- `repository.py` — `add_activity` / `add_water` / `add_weight`; `get_day_meals` (for
+  `/azi`), `get_day_activities`, `get_day_water_ml` (sum), `get_latest_weight_today`;
+  plus corrections: `LastEntry` DTO, `get_last_entry` (newest row of each table, picks
+  the overall newest by `created_at`) and `delete_entry` (meal also deletes its items via
+  explicit DELETEs — no async lazy-load, no reliance on SQLite FK pragma).
+- `handlers/tracking.py` — `/activitate` (text command **and** photo caption, like
+  `/masa`), `/apa <ml>` (additive, tolerant of a trailing "ml"), `/cantar <kg>` (Romanian
+  comma + trailing "kg" tolerated), `/azi` (today's meals + totals vs targets, activity,
+  water, latest weight).
+- `handlers/corrections.py` — `/sterge` with a reply-keyboard Da/Nu confirmation (no
+  inline callbacks). The pending entry's kind+id is held in FSM state so "Da" deletes
+  exactly what was shown; any other reply cancels. A meal delete also echoes the updated
+  daily total.
+- `strings.py` — all new Romanian text + `/azi` / confirm / done formatters; added an
+  `_esc` HTML-escape helper, applied to user text shown in `/azi` and `/sterge`.
+- `bot.py` — registered `tracking.router` and `corrections.router` (after meals).
+
+Verified: `ruff` + `black --check` pass; offline smoke test passes — additive water sum,
+activity/weight/meal logging, **last-entry ordering across all 4 types** with deletes,
+**meal delete cascading to `meal_items` + daily totals dropping to zero (P4 acceptance)**,
+the `/azi` formatter, HTML escaping of user text (`<3 lift & run` → escaped), the
+`/sterge` confirm/done formatters, and dispatcher wiring (tracking + corrections
+registered). HELP already listed all P4 commands (written in P1) — no change needed.
+
+Choices within P4 scope (no new architectural decisions needed): explicit child-row
+DELETE for meals; water tolerates a trailing unit; `/azi` shows today's weight only;
+`/sterge` operates on the most-recent entry overall (not date-limited).
+
+**Pending (live acceptance):** user logs `/activitate`, `/apa`, `/cantar`, checks `/azi`
+shows them with totals vs targets, and runs `/sterge` to confirm it removes the right
+entry (with confirmation) and totals update. Also confirm a `/activitate` **photo
+caption** in the privacy-OFF group. P4 stays **[IN PROGRESS]** until that passes → then
+mark **[DONE]**.

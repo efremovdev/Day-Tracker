@@ -49,3 +49,28 @@ Active bugs, gotchas, workarounds. Append with date.
   `meal_items` via `create_all` on next start — no migration needed, no data loss.
 - **LLM estimates remain approximate** (see planning risks above). Per-item grams in the
   caption improve accuracy; vague meals are flagged `approximate` in the reply.
+
+## 2026-06-18 — P4 notes
+
+- **`/sterge` confirmation is FSM-based; other commands can interrupt it.** While the
+  Da/Nu confirmation is pending (`DeleteForm.confirm`), a command handled by an earlier
+  router (`/masa`, `/azi`, `/apa`, `/cantar`, `/activitate`, `/profil`, `/tinte`) runs
+  in any state and consumes that message, leaving the delete confirmation dangling; the
+  next plain text then cancels it (anything other than the "Da" button cancels). Nothing
+  is deleted unintentionally. Same family as the P2/P3 FSM-swallowing note; revisit in P7.
+- **"Last entry" ties within the same second.** `created_at` is stored at SQLite's
+  1-second resolution, so two entries logged in the same second tie; `get_last_entry`
+  then breaks the tie by type order (meal → activity → water → weight), not true insert
+  order. Not reachable in practice (one user typing commands seconds apart); revisit only
+  if it ever matters.
+- **`/sterge` is not limited to today.** It removes the most recent entry *overall* (any
+  day, any type) — a literal "undo my last log". The confirmation shows exactly what it
+  is, so an unexpected old entry can be declined.
+- **`/azi` shows only today's weight.** If she didn't weigh in today, weight shows "—"
+  even if an earlier weigh-in exists. The "latest known weight" across days is a daily/
+  weekly-summary concern (P5/P6), kept out of the strictly-today `/azi` view.
+- **User text is HTML-escaped in `/azi` and `/sterge`** (new in P4). The older `/masa`
+  reply still interpolates LLM item names without escaping; harmless today (names come
+  from the model) and out of P4 scope — note for a P7 hardening pass.
+- **Schema is additive.** An existing `daytracker.db` gains `activities`, `water_logs`,
+  and `weight_logs` via `create_all` on next start — no migration, no data loss.

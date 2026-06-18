@@ -108,3 +108,52 @@ class MealItem(Base):
     fat_g: Mapped[int] = mapped_column(Integer)
 
     meal: Mapped[Meal] = relationship(back_populates="items")
+
+
+class ActivityLog(Base):
+    """One logged physical activity (P4): free text only, no calorie add-back.
+
+    Activity is *logged only* — the TDEE activity factor already represents her usual
+    activity, so exercise calories are never added back (DECISIONS.md, 2026-06-17).
+    Named ``ActivityLog`` to avoid clashing with :class:`daytracker.targets.Activity`.
+    """
+
+    __tablename__ = "activities"
+    __table_args__ = (Index("ix_activities_user_date", "telegram_user_id", "log_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    log_date: Mapped[date] = mapped_column(Date)
+
+    raw_text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class WaterLog(Base):
+    """One water entry (P4), in millilitres. Additive: a day's water is the sum of
+    its rows (DECISIONS.md, 2026-06-18). No water target exists."""
+
+    __tablename__ = "water_logs"
+    __table_args__ = (Index("ix_water_user_date", "telegram_user_id", "log_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    log_date: Mapped[date] = mapped_column(Date)
+
+    ml: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class WeightLog(Base):
+    """One weigh-in (P4), in kilograms. Each is its own row so the weekly trend (P6)
+    has history; ``/cantar`` never recomputes targets (DECISIONS.md, 2026-06-18)."""
+
+    __tablename__ = "weight_logs"
+    __table_args__ = (Index("ix_weight_user_date", "telegram_user_id", "log_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    log_date: Mapped[date] = mapped_column(Date)
+
+    weight_kg: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

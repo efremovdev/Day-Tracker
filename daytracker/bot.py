@@ -13,7 +13,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from .config import Settings, load_settings
 from .db import dispose_engine, get_sessionmaker, init_db
 from .estimator import create_estimator
-from .handlers import common, meals, profile
+from .handlers import common, corrections, meals, profile, tracking
 from .logging_setup import configure_logging
 from .middlewares import TrackedUserMiddleware
 
@@ -27,6 +27,8 @@ def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(common.router)
     dp.include_router(profile.router)
     dp.include_router(meals.router)
+    dp.include_router(tracking.router)
+    dp.include_router(corrections.router)
     return dp
 
 

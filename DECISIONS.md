@@ -128,3 +128,33 @@ these pin the open parameters):
   daily/weekly rollups cheap; `meal_items` preserves the per-item breakdown.
 - **No confirmation step:** per the plan, a meal is estimated and stored immediately,
   then echoed back; corrections come via `/sterge` (P4).
+
+## 2026-06-18 — P4 activity, water, weight & corrections
+
+Confirmed with the user at the start of P4 (logging math/no-add-back were already
+locked; these pin the open parameters):
+
+- **`/sterge` removes the last entry of ANY type** (most recent meal / activity /
+  water / weight, by `created_at`), not just the last meal. The confirmation shows
+  exactly what will be deleted so she can decline if it isn't the one she meant.
+  Picked over "last meal only" because it's a literal "undo my last log" and the
+  confirmation makes deleting the wrong type safe. Not limited to today — it's the
+  most recent entry overall.
+- **`/sterge` confirmation is a reply-keyboard (Da/Nu)**, consistent with `/profil`
+  and honoring the 2026-06-18 "no inline callbacks" decision (the message-only
+  tracked-user gate stays sufficient). The pending entry's kind+id is held in FSM
+  state, so it deletes exactly the entry it showed even if she logs more meanwhile.
+- **`/cantar` is a tracking log only — it does NOT recompute targets.** Each weigh-in
+  is its own row (history for the P6 weekly trend); `/azi` shows the latest. Targets
+  change only via `/profil` (re-run) or `/tinte`. Keeps tracking and targets cleanly
+  separated, matching "she re-runs `/profil` to update" (2026-06-18).
+- **`/apa` is additive:** each `/apa <ml>` adds a row; the day's water is the sum.
+  No water target exists (water isn't part of the profile/targets).
+- **`/activitate` stores free text only** (no parsing, no calorie add-back per
+  2026-06-17), and also works as a photo caption (like `/masa`) per the CLAUDE.md
+  command set. The image is never analyzed.
+- **Schema (additive):** `activities`, `water_logs`, `weight_logs` — each keyed by
+  Telegram id + `log_date`, with `created_at` (used to find the "last entry").
+  `create_all` adds them on next start; no migration, no data loss.
+- **User text is HTML-escaped** where shown back (`/azi`, `/sterge` confirm) so a
+  stray `<`/`&` in her caption can't break Telegram HTML parsing.
